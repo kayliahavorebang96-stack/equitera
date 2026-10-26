@@ -612,7 +612,7 @@ function rendreDashboard() {
         <path d="M 20 120 A 100 100 0 0 1 220 120" stroke="#edf0f7" stroke-width="22" fill="none" pathLength="100"/>
         ${score > 0 ? `<path d="M 20 120 A 100 100 0 0 1 220 120" stroke="${couleur}" stroke-width="22" fill="none" pathLength="100" stroke-dasharray="${score} 100"/>` : ""}
       </svg>
-      <div class="gauge-center"><strong>${score} %</strong><span>${ctrl.liste.filter((x) => x.ok).length} contrôles sur ${ctrl.liste.length} réussis</span></div>
+      <div class="gauge-center"><strong>${score} %</strong><span>moyenne des ${ctrl.liste.length} contrôles</span></div>
       <ul class="checks">${ctrl.liste.map((x) => `<li class="${x.ok ? "yes" : x.score >= 50 ? "part" : "no"}"><i>${x.ok ? "✓" : "!"}</i>${x.label}<b>${x.score} %</b></li>`).join("")}</ul>
     </div>`;
 

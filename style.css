@@ -369,3 +369,19 @@ tr.row-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn-bar); }
   .g-2-1, .g-3, .g-dash, .g-1-1, .g-users, .stat-row { grid-template-columns: 1fr; }
   .page-head h1, .hero h1 { font-size: 26px; }
 }
+/* Jauge du score de conformité (carte du tableau de bord) */
+.gauge { position: relative; }
+.gauge svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 4px auto 0; }
+.gauge-center { position: relative; margin: -46px auto 0; text-align: center; }
+.gauge-center strong { display: block; font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.gauge-center span { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.checks { list-style: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.checks li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--surface-2); font-size: 14px; font-weight: 600; line-height: 1.35; }
+.checks li i { display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; font-style: normal; font-size: 12px; font-weight: 800; }
+.checks li b { margin-left: auto; padding-left: 8px; white-space: nowrap; font-weight: 800; font-variant-numeric: tabular-nums; }
+.checks li.yes i { background: var(--ok-bg); color: var(--ok); }
+.checks li.yes b { color: var(--ok); }
+.checks li.part i { background: var(--warn-bg); color: var(--warn); }
+.checks li.part b { color: var(--warn); }
+.checks li.no i { background: var(--bad-bg); color: var(--bad); }
+.checks li.no b { color: var(--bad); }

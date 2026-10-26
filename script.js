@@ -908,6 +908,123 @@ function rendreRevue() {
   $("badge-review").textContent = (recru ? donnees.candidatures.filter(aRevoir).filter((c) => attribueA(c) === utilisateur.nom) : donnees.candidatures.filter(aRevoir)).length || "";
 }
 
+// =========================================================
+// Import d'un CV (analyse simulée dans le navigateur)
+// Le site n'a pas de serveur : le contenu du fichier n'est pas lu.
+// Un refus proposé entre dans la file de revue et attend une décision humaine.
+// =========================================================
+const CV_FORMATS = [".pdf", ".docx", ".doc"];
+const CV_TAILLE_MAX = 10 * 1024 * 1024;
+const zoneCV = $("drop-area");
+const inputCV = $("cv-file-input");
+const titreZoneCV = zoneCV.querySelector(".drop-title");
+const sousZoneCV = zoneCV.querySelector(".drop-sub");
+const titreZoneInitial = titreZoneCV.innerHTML;
+const sousZoneInitial = sousZoneCV.textContent;
+let cvChoisi = null;
+
+function reinitialiserDepot() {
+  cvChoisi = null;
+  inputCV.value = "";
+  titreZoneCV.innerHTML = titreZoneInitial;
+  sousZoneCV.textContent = sousZoneInitial;
+  zoneCV.classList.remove("has-file");
+}
+
+function choisirCV(fichier) {
+  if (!fichier) return;
+  const point = fichier.name.lastIndexOf(".");
+  const ext = point >= 0 ? fichier.name.slice(point).toLowerCase() : "";
+  if (!CV_FORMATS.includes(ext)) { reinitialiserDepot(); return notifier("Format non accepté : choisissez un fichier PDF ou DOCX.", "bad"); }
+  if (fichier.size > CV_TAILLE_MAX) { reinitialiserDepot(); return notifier("Fichier trop lourd : 10 Mo maximum.", "bad"); }
+  cvChoisi = fichier;
+  titreZoneCV.innerHTML = `<strong>${esc(fichier.name)}</strong>`;
+  sousZoneCV.textContent = `${Math.max(1, Math.round(fichier.size / 1024))} Ko · cliquez pour choisir un autre fichier`;
+  zoneCV.classList.add("has-file");
+}
+
+inputCV.addEventListener("change", (e) => choisirCV(e.target.files[0]));
+["dragenter", "dragover"].forEach((t) => zoneCV.addEventListener(t, (e) => { e.preventDefault(); zoneCV.classList.add("is-dragover"); }));
+["dragleave", "drop"].forEach((t) => zoneCV.addEventListener(t, (e) => { e.preventDefault(); zoneCV.classList.remove("is-dragover"); }));
+zoneCV.addEventListener("drop", (e) => choisirCV(e.dataTransfer.files[0]));
+// Si le fichier est lâché à côté de la zone, le navigateur ne doit pas l'ouvrir à la place du site
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
+
+function nomDepuisFichier(nomFichier) {
+  const base = nomFichier.replace(/\.[^.]+$/, "").replace(/[_\-.]+/g, " ");
+  const mots = base.split(/\s+/).filter((m) => m && !/^(cv|resume|curriculum|vitae|\d+)$/i.test(m));
+  const nom = mots.map((m) => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase()).join(" ");
+  return nom || "Candidat importé";
+}
+
+function analyserCV(fichier, poste) {
+  const graine = hash(`${fichier.name}|${fichier.size}|${poste}`);
+  const score = 35 + (graine % 61); // entre 35 et 95
+  // L'algorithme ne peut refuser que sur des critères qu'il utilise vraiment (règles désactivées exclues)
+  const desactivees = donnees.criteres.filter((r) => !evaluerRegle(r).active).map((r) => norm(r["1"]));
+  const refus = donnees.candidatures.filter((c) => estRefusAlgo(c) && !desactivees.includes(norm(c[C.CRITERE])));
+  const memePoste = refus.filter((c) => c[C.POSTE] === poste);
+  const source = memePoste.length ? memePoste : refus;
+  const modele = source.length ? source[(graine >>> 3) % source.length] : null;
+  return { score, refuse: score < 60 && !!modele, critere: modele ? modele[C.CRITERE] : "", motif: modele ? modele[C.MOTIF] : "" };
+}
+
+$("form-upload-cv").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!cvChoisi) return notifier("Choisissez d'abord un CV au format PDF ou DOCX.", "bad");
+  const fichier = cvChoisi;
+  const poste = $("cv-poste-target").value;
+  const btn = $("btn-process-cv");
+  btn.disabled = true;
+  btn.textContent = "Analyse en cours…";
+  setTimeout(() => {
+    const r = analyserCV(fichier, poste);
+    const auj = new Date();
+    const suppression = new Date(auj);
+    suppression.setFullYear(auj.getFullYear() + 2);
+    const c = {
+      [C.ID]: "IMP" + String(Date.now()).slice(-6),
+      [C.NOM]: nomDepuisFichier(fichier.name),
+      [C.POSTE]: poste,
+      [C.RECU]: auj.toLocaleDateString("fr-FR"),
+      [C.SCORE]: r.score,
+      [C.STATUT]: r.refuse ? "Refuse_auto" : "Accepte",
+      [C.CRITERE]: r.refuse ? r.critere : "",
+      [C.MOTIF]: r.refuse ? r.motif : "",
+      [C.DECIDEUR]: r.refuse && utilisateur.role === "recruteur" ? utilisateur.nom : "",
+      [C.DATE_DEC]: "",
+      [C.SUPPR]: suppression.toLocaleDateString("fr-FR"),
+      [C.EMAIL]: "",
+      importe: true,
+    };
+    donnees.candidatures.unshift(c);
+    tracer("CV importé", `${c[C.NOM]} (${c[C.ID]}), ${poste} : ${r.refuse ? "refus proposé, en attente de revue" : "accepté"}`);
+    btn.disabled = false;
+    btn.textContent = "Traiter et analyser le CV";
+    reinitialiserDepot();
+    rendreTout();
+
+    const n = r.refuse ? niveau(c[C.CRITERE]) : "";
+    const encadre = r.refuse
+      ? `<div class="callout ${n === "interdit" ? "danger" : n === "suspect" ? "warning" : "info"}"><strong>Aucun refus sans validation humaine</strong><p>Ce refus est placé dans la file de revue. Il ne sera communiqué au candidat qu'après la décision d'une personne.</p></div>`
+      : `<div class="callout info"><strong>Candidature retenue</strong><p>Le CV passe à l'étape suivante du recrutement.</p></div>`;
+    ouvrirModale(`Analyse de ${c[C.NOM]}`, `
+      <dl class="detail-list">
+        <dt>Fichier</dt><dd>${esc(fichier.name)}</dd>
+        <dt>Poste</dt><dd>${esc(poste)}</dd>
+        <dt>Score de l'algorithme</dt><dd>${r.score} / 100</dd>
+        <dt>Proposition</dt><dd>${r.refuse ? badge("warn", "Refus proposé") : badge("ok", "Accepté")}</dd>
+        ${r.refuse ? `<dt>Critère déclencheur</dt><dd>${esc(c[C.CRITERE])} ${badgeNiveau(c[C.CRITERE])}</dd>` : ""}
+      </dl>
+      ${encadre}
+      <p class="muted-p">Analyse simulée pour la démonstration : le contenu du fichier n'est pas lu.</p>`,
+      r.refuse && peut("decider")
+        ? [{ texte: "Plus tard", action: fermerModale }, { texte: "Décider maintenant", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) }]
+        : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }]);
+  }, 900);
+});
+
 // Modèles de motif : jamais de critère discriminatoire dans le texte envoyé au candidat
 const CONSEILS = {
   experience: "Nous vous encourageons à postuler de nouveau lorsque vous aurez acquis davantage d'expérience sur ce type de mission.",
@@ -972,7 +1089,8 @@ async function decider(c, action, btn) {
   }
   btn.disabled = true;
   btn.textContent = "Envoi…";
-  const viaMake = mode === "live" || parametres.envoisReels;
+  // Un CV importé n'existe pas dans Google Sheets : sa décision reste dans le site
+  const viaMake = !c.importe && (mode === "live" || parametres.envoisReels);
   try {
     if (viaMake) {
       const url = action === "annuler"

@@ -1057,10 +1057,28 @@ $("form-upload-cv").addEventListener("submit", async (e) => {
     </dl>
     ${encadre}
     ${stockage}`,
-    r.refuse && peut("decider")
-      ? [{ texte: "Plus tard", action: fermerModale }, { texte: "Décider maintenant", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) }]
-      : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }]);
+    r.refuse
+      ? [{ texte: "Voir dans la file de revue", classe: peut("decider") ? "btn-outline" : "btn-primary", action: () => voirCandidat(c[C.ID], "review") },
+         ...(peut("decider") ? [{ texte: "Décider maintenant", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) }] : [])]
+      : voitVue("analyse") && utilisateur.role !== "recruteur"
+        ? [{ texte: "Fermer", action: fermerModale }, { texte: "Voir la candidature", classe: "btn-primary", action: () => voirCandidat(c[C.ID], "analyse") }]
+        : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }]);
 });
+
+// Emmène vers le candidat qui vient d'être importé : la recherche l'isole, puis sa ligne est surlignée
+function voirCandidat(id, vue) {
+  fermerModale();
+  location.hash = "#" + vue;
+  const champ = $("recherche");
+  champ.value = id;
+  champ.dispatchEvent(new Event("input"));
+  setTimeout(() => {
+    const corps = $(vue === "review" ? "review-body" : "candidats-body");
+    corps.scrollIntoView({ behavior: "smooth", block: "center" });
+    const ligne = corps.querySelector("tr");
+    if (ligne) ligne.classList.add("row-new");
+  }, 200);
+}
 
 // Modèles de motif : jamais de critère discriminatoire dans le texte envoyé au candidat
 const CONSEILS = {

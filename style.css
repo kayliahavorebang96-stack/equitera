@@ -389,3 +389,7 @@ tr.row-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn-bar); }
 /* Zone de dépôt : fichier choisi */
 .drop-area.has-file { border-style: solid; border-color: var(--indigo); background: var(--indigo-50); }
 .drop-area.has-file .drop-title strong { color: var(--indigo); word-break: break-all; }
+
+/* Ligne du candidat qui vient d'être importé */
+.row-new td { animation: surlignage 3s ease; }
+@keyframes surlignage { 0%, 50% { background: var(--indigo-50); } 100% { background: transparent; } }

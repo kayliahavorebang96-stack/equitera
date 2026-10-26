@@ -18,6 +18,8 @@ const WEBHOOK_PURGE = "https://hook.eu1.make.com/j9shytvloq58plu4me82jlyozmltvws
 // Nouveau scénario à créer : renvoie TOUTES les lignes de la feuille Candidatures.
 // Tant qu'il n'est pas renseigné, le site fonctionne en mode démonstration (demo-data.js).
 const WEBHOOK_CANDIDATURES = "https://hook.eu1.make.com/dc639a6swkt1fifbyla4b1oxfnyuo2zg";
+// Scénario « ajouter-candidature » : ajoute un CV importé dans la feuille Candidatures
+const WEBHOOK_AJOUTER_CV = "https://hook.eu1.make.com/6tjc1tp1ggwptwebdn4rdevfw9ap3lpc";
 
 // Colonnes de la feuille Candidatures
 const C = { ID: "0", NOM: "1", POSTE: "2", RECU: "3", SCORE: "4", STATUT: "5", CRITERE: "6", MOTIF: "7", DECIDEUR: "8", DATE_DEC: "9", SUPPR: "10", EMAIL: "11" };
@@ -132,6 +134,7 @@ function norm(t) { return String(t || "").toLowerCase().normalize("NFD").replace
 function lireDate(v) {
   if (!v) return null;
   const s = String(v).trim();
+  if (/^\d{5}(\.\d+)?$/.test(s)) return new Date(1899, 11, 30 + Math.floor(+s));
   const fr = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (fr) return new Date(+fr[3], +fr[2] - 1, +fr[1]);
   const d = new Date(s);
@@ -922,6 +925,15 @@ const sousZoneCV = zoneCV.querySelector(".drop-sub");
 const titreZoneInitial = titreZoneCV.innerHTML;
 const sousZoneInitial = sousZoneCV.textContent;
 let cvChoisi = null;
+let nomAuto = "";
+// Champs Nom et Email du candidat, ajoutés au-dessus du choix du poste
+const champsCandidat = document.createElement("div");
+champsCandidat.className = "grid g-1-1";
+champsCandidat.style.marginTop = "16px";
+champsCandidat.innerHTML = `
+  <label class="field"><span>Nom du candidat</span><input id="cv-nom" required placeholder="Rempli à partir du nom du fichier" /></label>
+  <label class="field"><span>Email du candidat</span><input id="cv-email" type="email" required placeholder="prenom.nom@exemple.fr" /></label>`;
+$("form-upload-cv").querySelector(".upload-options").before(champsCandidat);
 
 function reinitialiserDepot() {
   cvChoisi = null;
@@ -929,6 +941,9 @@ function reinitialiserDepot() {
   titreZoneCV.innerHTML = titreZoneInitial;
   sousZoneCV.textContent = sousZoneInitial;
   zoneCV.classList.remove("has-file");
+  $("cv-nom").value = "";
+  $("cv-email").value = "";
+  nomAuto = "";
 }
 
 function choisirCV(fichier) {
@@ -941,6 +956,8 @@ function choisirCV(fichier) {
   titreZoneCV.innerHTML = `<strong>${esc(fichier.name)}</strong>`;
   sousZoneCV.textContent = `${Math.max(1, Math.round(fichier.size / 1024))} Ko · cliquez pour choisir un autre fichier`;
   zoneCV.classList.add("has-file");
+  // Propose un nom tiré du fichier, sans écraser un nom tapé à la main
+  if (!$("cv-nom").value || $("cv-nom").value === nomAuto) { nomAuto = nomDepuisFichier(fichier.name); $("cv-nom").value = nomAuto; }
 }
 
 inputCV.addEventListener("change", (e) => choisirCV(e.target.files[0]));
@@ -970,59 +987,79 @@ function analyserCV(fichier, poste) {
   return { score, refuse: score < 60 && !!modele, critere: modele ? modele[C.CRITERE] : "", motif: modele ? modele[C.MOTIF] : "" };
 }
 
-$("form-upload-cv").addEventListener("submit", (e) => {
+$("form-upload-cv").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!cvChoisi) return notifier("Choisissez d'abord un CV au format PDF ou DOCX.", "bad");
   const fichier = cvChoisi;
   const poste = $("cv-poste-target").value;
+  const nom = $("cv-nom").value.trim() || nomDepuisFichier(fichier.name);
+  const email = $("cv-email").value.trim();
   const btn = $("btn-process-cv");
   btn.disabled = true;
   btn.textContent = "Analyse en cours…";
-  setTimeout(() => {
-    const r = analyserCV(fichier, poste);
-    const auj = new Date();
-    const suppression = new Date(auj);
-    suppression.setFullYear(auj.getFullYear() + 2);
-    const c = {
-      [C.ID]: "IMP" + String(Date.now()).slice(-6),
-      [C.NOM]: nomDepuisFichier(fichier.name),
-      [C.POSTE]: poste,
-      [C.RECU]: auj.toLocaleDateString("fr-FR"),
-      [C.SCORE]: r.score,
-      [C.STATUT]: r.refuse ? "Refuse_auto" : "Accepte",
-      [C.CRITERE]: r.refuse ? r.critere : "",
-      [C.MOTIF]: r.refuse ? r.motif : "",
-      [C.DECIDEUR]: r.refuse && utilisateur.role === "recruteur" ? utilisateur.nom : "",
-      [C.DATE_DEC]: "",
-      [C.SUPPR]: suppression.toLocaleDateString("fr-FR"),
-      [C.EMAIL]: "",
-      importe: true,
-    };
-    donnees.candidatures.unshift(c);
-    tracer("CV importé", `${c[C.NOM]} (${c[C.ID]}), ${poste} : ${r.refuse ? "refus proposé, en attente de revue" : "accepté"}`);
-    btn.disabled = false;
-    btn.textContent = "Traiter et analyser le CV";
-    reinitialiserDepot();
-    rendreTout();
+  await new Promise((ok) => setTimeout(ok, 700));
 
-    const n = r.refuse ? niveau(c[C.CRITERE]) : "";
-    const encadre = r.refuse
-      ? `<div class="callout ${n === "interdit" ? "danger" : n === "suspect" ? "warning" : "info"}"><strong>Aucun refus sans validation humaine</strong><p>Ce refus est placé dans la file de revue. Il ne sera communiqué au candidat qu'après la décision d'une personne.</p></div>`
-      : `<div class="callout info"><strong>Candidature retenue</strong><p>Le CV passe à l'étape suivante du recrutement.</p></div>`;
-    ouvrirModale(`Analyse de ${c[C.NOM]}`, `
-      <dl class="detail-list">
-        <dt>Fichier</dt><dd>${esc(fichier.name)}</dd>
-        <dt>Poste</dt><dd>${esc(poste)}</dd>
-        <dt>Score de l'algorithme</dt><dd>${r.score} / 100</dd>
-        <dt>Proposition</dt><dd>${r.refuse ? badge("warn", "Refus proposé") : badge("ok", "Accepté")}</dd>
-        ${r.refuse ? `<dt>Critère déclencheur</dt><dd>${esc(c[C.CRITERE])} ${badgeNiveau(c[C.CRITERE])}</dd>` : ""}
-      </dl>
-      ${encadre}
-      <p class="muted-p">Analyse simulée pour la démonstration : le contenu du fichier n'est pas lu.</p>`,
-      r.refuse && peut("decider")
-        ? [{ texte: "Plus tard", action: fermerModale }, { texte: "Décider maintenant", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) }]
-        : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }]);
-  }, 900);
+  const r = analyserCV(fichier, poste);
+  const auj = new Date();
+  const suppression = new Date(auj);
+  suppression.setFullYear(auj.getFullYear() + 2);
+  const c = {
+    [C.ID]: "IMP" + String(Date.now()).slice(-6),
+    [C.NOM]: nom,
+    [C.POSTE]: poste,
+    [C.RECU]: auj.toLocaleDateString("fr-FR"),
+    [C.SCORE]: r.score,
+    [C.STATUT]: r.refuse ? "Refuse_auto" : "Accepte",
+    [C.CRITERE]: r.refuse ? r.critere : "",
+    [C.MOTIF]: r.refuse ? r.motif : "",
+    [C.DECIDEUR]: "",
+    [C.DATE_DEC]: "",
+    [C.SUPPR]: suppression.toLocaleDateString("fr-FR"),
+    [C.EMAIL]: email,
+  };
+
+  // Enregistrement dans Google Sheets via Make : le candidat existe alors partout,
+  // et les décisions (annulation, envoi du motif par email) fonctionnent comme pour les autres.
+  btn.textContent = "Enregistrement…";
+  let enregistre = false;
+  try {
+    const champs = { id: c[C.ID], nom, poste, recu: c[C.RECU], score: r.score, statut: c[C.STATUT], critere: c[C.CRITERE], motif: c[C.MOTIF], suppr: c[C.SUPPR], email };
+    const rep = await (await fetch(`${WEBHOOK_AJOUTER_CV}?${Object.entries(champs).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`)).text();
+    enregistre = rep.includes("success");
+  } catch (err) {
+    console.error(err);
+  }
+  // Sans Make, le CV reste seulement dans cette page et ses décisions ne passent pas par Make
+  if (!enregistre) c.importe = true;
+
+  donnees.candidatures.unshift(c);
+  tracer("CV importé", `${nom} (${c[C.ID]}), ${poste} : ${r.refuse ? "refus proposé, en attente de revue" : "accepté"}${enregistre ? ", enregistré dans Google Sheets" : ", non enregistré"}`);
+  btn.disabled = false;
+  btn.textContent = "Traiter et analyser le CV";
+  reinitialiserDepot();
+  rendreTout();
+
+  const n = r.refuse ? niveau(c[C.CRITERE]) : "";
+  const encadre = r.refuse
+    ? `<div class="callout ${n === "interdit" ? "danger" : n === "suspect" ? "warning" : "info"}"><strong>Aucun refus sans validation humaine</strong><p>Ce refus est placé dans la file de revue. Il ne sera communiqué au candidat qu'après la décision d'une personne.</p></div>`
+    : `<div class="callout info"><strong>Candidature retenue</strong><p>Le CV passe à l'étape suivante du recrutement.</p></div>`;
+  const stockage = enregistre
+    ? `<p class="muted-p">Candidature enregistrée dans Google Sheets. Analyse simulée pour la démonstration : le contenu du fichier n'est pas lu.</p>`
+    : `<div class="callout warning"><strong>Non enregistré dans Google Sheets</strong><p>Make n'a pas répondu : le CV reste visible jusqu'au rechargement de la page, et aucun email ne pourra être envoyé. Vérifiez que le scénario « ajouter-candidature » est actif.</p></div>`;
+  ouvrirModale(`Analyse de ${nom}`, `
+    <dl class="detail-list">
+      <dt>Fichier</dt><dd>${esc(fichier.name)}</dd>
+      <dt>Email</dt><dd>${esc(email)}</dd>
+      <dt>Poste</dt><dd>${esc(poste)}</dd>
+      <dt>Score de l'algorithme</dt><dd>${r.score} / 100</dd>
+      <dt>Proposition</dt><dd>${r.refuse ? badge("warn", "Refus proposé") : badge("ok", "Accepté")}</dd>
+      ${r.refuse ? `<dt>Critère déclencheur</dt><dd>${esc(c[C.CRITERE])} ${badgeNiveau(c[C.CRITERE])}</dd>` : ""}
+    </dl>
+    ${encadre}
+    ${stockage}`,
+    r.refuse && peut("decider")
+      ? [{ texte: "Plus tard", action: fermerModale }, { texte: "Décider maintenant", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) }]
+      : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }]);
 });
 
 // Modèles de motif : jamais de critère discriminatoire dans le texte envoyé au candidat

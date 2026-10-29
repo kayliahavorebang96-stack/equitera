@@ -393,3 +393,102 @@ tr.row-warn td:first-child { box-shadow: inset 4px 0 0 var(--warn-bar); }
 /* Ligne du candidat qui vient d'être importé */
 .row-new td { animation: surlignage 3s ease; }
 @keyframes surlignage { 0%, 50% { background: var(--indigo-50); } 100% { background: transparent; } }
+
+
+/* ===== Fenêtre modale (décisions, analyse d'un CV) ===== */
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(16, 26, 63, 0.45); backdrop-filter: blur(4px); animation: apparition 200ms ease both; }
+.modal-backdrop[hidden] { display: none; }
+.modal { width: min(720px, 100%); max-height: calc(100vh - 40px); display: flex; flex-direction: column; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-lg); overflow: hidden; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.modal-head h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.015em; }
+.modal-body { display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; overflow-y: auto; }
+.modal-body p { margin: 0; }
+.modal-body > * { flex-shrink: 0; }
+.modal-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.modal-foot:empty { display: none; }
+.detail-list { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; font-size: 14.5px; }
+.detail-list dt { color: var(--muted); font-weight: 700; }
+.detail-list dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.field-help-p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+
+/* Résultat de l'analyse d'un CV */
+.cv-verdict { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; border-radius: var(--r-md); }
+.cv-verdict strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.cv-verdict p { margin-top: 4px !important; font-size: 14.5px; line-height: 1.5; }
+.cv-icon { display: grid; place-items: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; color: #fff; font-size: 20px; font-weight: 800; }
+.cv-verdict.ok { background: var(--ok-bg); } .cv-verdict.ok .cv-icon { background: var(--ok); } .cv-verdict.ok strong { color: var(--ok); }
+.cv-verdict.bad { background: var(--bad-bg); } .cv-verdict.bad .cv-icon { background: var(--bad); } .cv-verdict.bad strong { color: var(--bad); }
+.cv-verdict.warn { background: var(--warn-bg); } .cv-verdict.warn .cv-icon { background: var(--warn-bar); } .cv-verdict.warn strong { color: var(--warn); }
+.cv-verdict.neutral { background: var(--indigo-50); } .cv-verdict.neutral .cv-icon { background: var(--indigo); } .cv-verdict.neutral strong { color: var(--indigo); }
+.cv-score { display: inline-block; width: 120px; height: 8px; margin-right: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); vertical-align: middle; overflow: hidden; }
+.cv-score i { display: block; height: 100%; border-radius: 999px; background: var(--indigo); }
+.cv-score i.ok { background: var(--ok); } .cv-score i.bad { background: var(--bad); } .cv-score i.warn { background: var(--warn-bar); }
+.cv-titre { margin: 4px 0 -4px; font-size: 15px; font-weight: 800; }
+.cv-checks { border: 1px solid var(--border); border-radius: var(--r-md); }
+.cv-checks th, .cv-checks td { padding: 9px 14px; font-size: 14px; }
+.cv-checks tr.cv-bloquant td { background: var(--bad-bg); font-weight: 700; }
+
+/* Cartes des rapports */
+.report-card { display: flex; flex-direction: column; gap: 14px; }
+.report-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; }
+.report-card ul li + li { margin-top: 4px; }
+.report-card .btn { align-self: flex-start; margin-top: auto; }
+.report-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--indigo-50); color: var(--indigo); }
+.report-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Paramètres et matrice des droits */
+.tag-editor { display: flex; flex-wrap: wrap; gap: 8px; }
+.matrix td, .matrix th { text-align: center; }
+.matrix td:first-child, .matrix th:first-child { text-align: left; }
+
+/* ===== Impression : rapports d'audit et export d'une vue ===== */
+.print-report { font-family: var(--font, "Plus Jakarta Sans", sans-serif); color: #101a3f; font-size: 10.5pt; line-height: 1.5; }
+.print-report .pr-head { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 10pt; border-bottom: 3px solid #5b4cf0; }
+.print-report .pr-meta { text-align: right; font-size: 8.5pt; color: #5d6685; }
+.print-report h1 { margin: 16pt 0 4pt; font-size: 22pt; font-weight: 800; letter-spacing: -0.02em; }
+.print-report h2 { margin: 18pt 0 6pt; font-size: 12.5pt; font-weight: 800; color: #101a3f; break-after: avoid; }
+.print-report table { width: 100%; border-collapse: collapse; margin-top: 4pt; font-size: 9.5pt; }
+.print-report th { padding: 6pt 8pt; text-align: left; font-size: 8.5pt; font-weight: 800; color: #5d6685; background: #f3f2ff; border-bottom: 1px solid #d9dcf0; }
+.print-report td { padding: 6pt 8pt; border-bottom: 1px solid #e1e5f2; vertical-align: middle; }
+.print-report tr { break-inside: avoid; }
+.print-report .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.print-report .pr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8pt; margin-top: 12pt; }
+.print-report .pr-kpis div { padding: 10pt; border-radius: 10px; background: #f6f7fd; border: 1px solid #e1e5f2; font-size: 8.5pt; color: #5d6685; line-height: 1.35; }
+.print-report .pr-kpis b { display: block; margin-bottom: 3pt; font-size: 17pt; font-weight: 800; color: #101a3f; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.print-report .pr-verdict { margin-top: 12pt; padding: 10pt 12pt; border-radius: 0 10px 10px 0; border-left: 5px solid; break-inside: avoid; }
+.print-report .pr-verdict strong { display: block; font-size: 11.5pt; }
+.print-report .pr-verdict p { margin: 3pt 0 0; }
+.print-report .pr-verdict.ok { border-color: #12a150; background: #e6f7ee; }
+.print-report .pr-verdict.bad { border-color: #d92d48; background: #fdebee; }
+.print-report .pr-verdict.neutral { border-color: #8c93ad; background: #f6f7fd; }
+.print-report .pr-verdict.warn { border-color: #f79009; background: #fef3e2; }
+.print-report .pr-tag { display: inline-block; padding: 1pt 7pt; border-radius: 999px; font-size: 8pt; font-weight: 800; white-space: nowrap; }
+.print-report .pr-tag.ok { color: #12a150; background: #e6f7ee; }
+.print-report .pr-tag.warn { color: #c26a00; background: #fef3e2; }
+.print-report .pr-tag.bad { color: #d92d48; background: #fdebee; }
+.print-report td:has(.pr-bar) { white-space: nowrap; }
+.print-report .pr-bar { display: inline-block; width: 60px; height: 7px; margin-right: 6px; border-radius: 999px; background: #eef1fa; vertical-align: middle; overflow: hidden; }
+.print-report .pr-bar i { display: block; height: 100%; border-radius: 999px; background: #5b4cf0; }
+.print-report .pr-bar i.bad { background: #d92d48; }
+.print-report .pr-bar i.warn { background: #f79009; }
+.print-report .pr-note { margin: 4pt 0 0; font-size: 8.5pt; color: #5d6685; }
+.print-report .pr-actions { margin: 4pt 0 0; padding-left: 16pt; }
+.print-report .pr-actions li { margin-top: 4pt; }
+.print-report .pr-fiche .pr-th-side { width: 28%; vertical-align: top; }
+.print-report .pr-sign { display: flex; justify-content: space-between; gap: 20pt; margin-top: 24pt; padding-top: 10pt; border-top: 1px solid #e1e5f2; font-size: 8.5pt; color: #5d6685; break-inside: avoid; }
+
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
+  /* Rapport d'audit : seul le rapport est imprimé */
+  body.print-report-mode > *:not(#print-report):not(svg) { display: none !important; }
+  body.print-report-mode #print-report { display: block !important; }
+  /* Export d'une vue : seule la vue choisie, sans menu ni barre du haut */
+  body.print-view .sidebar, body.print-view .topbar, body.print-view .no-print, body.print-view .toast, body.print-view .modal-backdrop { display: none !important; }
+  body.print-view .layout { display: block; }
+  body.print-view .view { display: none !important; }
+  body.print-view .view.print-target { display: flex !important; animation: none; }
+  body.print-view .card { box-shadow: none; break-inside: avoid; }
+}

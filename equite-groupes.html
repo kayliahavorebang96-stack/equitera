@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Équité par groupe - Equitera</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --ink: #101a3f; --indigo: #5b4cf0; --indigo-2: #8b7cf8; --indigo-3: #c9c1fd; --indigo-50: #efedff; --coral: #ff7a59;
+  --grad-brand: linear-gradient(135deg, #5b4cf0 0%, #8b7cf8 100%);
+  --grad-night: linear-gradient(150deg, #101a3f 0%, #1d2b63 55%, #3b2f9e 100%);
+  --bg: #eef1fa; --surface: #fff; --surface-2: #f6f7fd; --border: #e1e5f2; --text: #101a3f; --muted: #5d6685;
+  --ok: #12a150; --ok-bg: #e6f7ee; --warn: #c26a00; --warn-bg: #fef3e2; --bad: #d92d48; --bad-bg: #fdebee;
+  --shadow: 0 1px 2px rgba(16,26,63,.05), 0 10px 30px rgba(16,26,63,.06);
+  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p { margin: 0; }
+a { color: var(--indigo); font-weight: 700; text-decoration: none; }
+:focus-visible { outline: 3px solid var(--indigo-3); outline-offset: 2px; border-radius: 6px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 36px) 64px; }
+
+.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); }
+.brand svg { width: 38px; height: 38px; }
+.brand strong { display: block; font-size: 21px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.brand span { display: block; margin-top: 4px; font-size: 10px; font-weight: 800; letter-spacing: .22em; color: var(--indigo); }
+.proto { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-weight: 800; font-size: 13.5px; }
+.proto::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+.hero { margin-top: 20px; padding: 30px 32px; border-radius: 24px; background: var(--grad-night); color: #fff; box-shadow: 0 24px 50px rgba(16,26,63,.22); }
+.hero h1 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.hero p { margin-top: 10px; max-width: 70ch; color: #d6dbf3; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-top: 20px; padding: 18px 20px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+select { min-width: 210px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); font: inherit; font-weight: 600; color: var(--text); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); font: inherit; font-weight: 800; font-size: 14px; color: var(--text); cursor: pointer; }
+.btn:hover { border-color: var(--indigo-3); }
+.btn.primary { border: 0; background: var(--grad-brand); color: #fff; box-shadow: 0 8px 18px rgba(91,76,240,.28); }
+.spacer { flex: 1; }
+.source { font-size: 13px; color: var(--muted); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 18px; }
+.kpi { padding: 18px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+.kpi b { display: block; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.kpi span { display: block; margin-top: 6px; font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.kpi.bad b { color: var(--bad); } .kpi.warn b { color: var(--warn); } .kpi.ok b { color: var(--ok); }
+
+.verdict { margin-top: 18px; padding: 18px 22px; border-radius: 0 18px 18px 0; border-left: 5px solid; background: var(--surface); box-shadow: var(--shadow); }
+.verdict strong { display: block; font-size: 17px; font-weight: 800; }
+.verdict p { margin-top: 6px; max-width: 80ch; }
+.verdict.bad { border-color: var(--bad); } .verdict.bad strong { color: var(--bad); }
+.verdict.warn { border-color: #f79009; } .verdict.warn strong { color: var(--warn); }
+.verdict.ok { border-color: var(--ok); } .verdict.ok strong { color: var(--ok); }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; }
+.card { padding: 22px 24px; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); min-width: 0; }
+.card h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.015em; }
+.card .sub { margin-top: 4px; font-size: 13.5px; color: var(--muted); }
+.card + .card { margin-top: 18px; }
+.grid .card + .card { margin-top: 0; }
+
+.chart { margin-top: 14px; }
+.chart-box { position: relative; height: 300px; margin-top: 14px; }
+.chart-box.small { height: 260px; }
+.vide { padding: 30px 0; text-align: center; color: var(--muted); }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.table-wrap { margin-top: 14px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { padding: 10px 12px; text-align: left; font-size: 12.5px; font-weight: 800; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+.tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.tag.ok { color: var(--ok); background: var(--ok-bg); } .tag.warn { color: var(--warn); background: var(--warn-bg); } .tag.bad { color: var(--bad); background: var(--bad-bg); } .tag.ref { color: var(--indigo); background: var(--indigo-50); }
+
+.test { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 14px; }
+.test div { padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
+.test b { display: block; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.test span { font-size: 12.5px; color: var(--muted); }
+.note { margin-top: 12px; font-size: 13.5px; color: var(--muted); }
+.note.warn { color: var(--warn); font-weight: 600; }
+
+details.method { margin-top: 18px; padding: 0; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); }
+details.method summary { padding: 20px 24px; cursor: pointer; font-size: 18px; font-weight: 800; list-style: none; }
+details.method summary::-webkit-details-marker { display: none; }
+details.method summary::after { content: "Afficher"; float: right; font-size: 13.5px; color: var(--indigo); }
+details.method[open] summary::after { content: "Masquer"; }
+.method-body { padding: 0 24px 24px; }
+.method-body h3 { margin: 18px 0 6px; font-size: 15.5px; font-weight: 800; }
+.method-body p, .method-body li { max-width: 82ch; }
+.method-body ul { margin: 6px 0 0; padding-left: 20px; }
+.formula { margin-top: 8px; padding: 12px 16px; border-radius: 12px; background: var(--indigo-50); font-weight: 600; }
+.foot { margin-top: 28px; font-size: 13px; color: var(--muted); }
+
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
+  .controls .btn, #fichier { display: none; }
+  .card, .kpi, .verdict, details.method { box-shadow: none; border: 1px solid var(--border); break-inside: avoid; }
+  details.method .method-body { display: block; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="eq-grad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#5B4CF0" /><stop offset="1" stop-color="#9B8CFF" /></linearGradient>
+    <symbol id="eq-mark" viewBox="-48 -48 96 96">
+      <circle r="36" fill="none" stroke="url(#eq-grad)" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="56 44" transform="rotate(-10)" />
+      <circle r="36" fill="none" stroke="#101A3F" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="24 76" transform="rotate(-170)" />
+      <circle r="18" fill="none" stroke="#101A3F" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="74 26" transform="rotate(35)" />
+      <circle r="7.5" fill="#FF7A59" />
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <div class="top">
+    <a class="brand" href="./#dashboard"><svg aria-hidden="true"><use href="#eq-mark" /></svg><div><strong>equitera</strong><span>HUMAN ETHICS AI</span></div></a>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span class="proto">Prototype universitaire · données de démonstration</span>
+      <a class="btn" href="./#analyse">Retour à Equitera</a>
+    </div>
+  </div>
+
+  <header class="hero">
+    <h1>Équité par groupe de personnes</h1>
+    <p>Le tri retient-il autant les femmes que les hommes ? Cette page analyse les candidatures d’Equitera : elle déduit le genre à partir du prénom, compare les taux de sélection, applique la règle des quatre cinquièmes et teste si les écarts sont statistiquement significatifs, avant et après la revue humaine.</p>
+  </header>
+
+  <div class="controls">
+    <label class="field">Comparer
+      <select id="variable">
+        <option value="genre">Femmes et hommes</option>
+        <option value="genre_poste">Femmes et hommes, par poste</option>
+      </select>
+    </label>
+    <label class="field">Décision analysée
+      <select id="decision">
+        <option value="algo">Décision de l’algorithme</option>
+        <option value="finale">Décision finale, après revue humaine</option>
+      </select>
+    </label>
+    <label class="field">Poste
+      <select id="poste"><option value="">Tous les postes</option></select>
+    </label>
+    <span class="spacer"></span>
+    <span class="source" id="source">Chargement des données…</span>
+    <button class="btn" id="btn-csv" type="button">Télécharger les résultats (CSV)</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div id="verdict"></div>
+
+  <div class="grid">
+    <article class="card">
+      <h2>Taux de sélection par groupe</h2>
+      <p class="sub">Barres : part des candidats retenus. Traits : intervalle de confiance à 95 % (Wilson). Ligne pointillée : seuil des quatre cinquièmes (80 % du meilleur taux, ou du meilleur taux du poste en vue par poste). Survolez une barre pour le détail.</p>
+      <div class="chart-box"><canvas id="chart-taux"></canvas></div>
+    </article>
+    <article class="card">
+      <h2>Test d’indépendance global</h2>
+      <p class="sub">La décision (retenu ou refusé) dépend-elle du groupe ?</p>
+      <div class="test" id="test"></div>
+      <p class="note" id="test-note"></p>
+    </article>
+  </div>
+
+  <div class="grid">
+    <article class="card">
+      <h2>Distribution des scores de l’algorithme</h2>
+      <p class="sub" id="histo-sub">Part des candidats de chaque groupe par tranche de score. Cliquez sur la légende pour masquer un groupe.</p>
+      <div class="chart-box small"><canvas id="chart-histo"></canvas></div>
+    </article>
+    <article class="card">
+      <h2>Répartition des décisions par groupe</h2>
+      <p class="sub">Que deviennent les candidatures de chaque groupe, de l’algorithme à la décision humaine ? Cliquez sur la légende pour masquer une décision.</p>
+      <div class="chart-box small"><canvas id="chart-repartition"></canvas></div>
+    </article>
+  </div>
+
+  <article class="card" style="margin-top:18px">
+    <h2>Détail par groupe</h2>
+    <p class="sub" id="table-sub">Chaque groupe est comparé au groupe de référence, celui qui a le meilleur taux de sélection.</p>
+    <div class="table-wrap"><table id="table"></table></div>
+  </article>
+
+  <article class="card">
+    <h2>Avant et après la revue humaine</h2>
+    <p class="sub">Le contrôle humain réduit-il l’écart ? Comparaison de l’écart entre femmes et hommes sur la décision de l’algorithme et sur la décision finale.</p>
+    <div class="table-wrap"><table id="avant-apres"></table></div>
+  </article>
+
+  <article class="card">
+    <h2>Pourquoi ces écarts ? Critères des refus par groupe</h2>
+    <p class="sub">Part des refus de l’algorithme attribuée à chaque critère, pour chaque groupe. Un critère interdit ou suspect qui se concentre sur un groupe explique un écart illégitime.</p>
+    <div class="table-wrap"><table id="criteres"></table></div>
+  </article>
+
+  <article class="card">
+    <h2>Qualité de l’inférence du genre</h2>
+    <p class="sub">Le genre n’est pas collecté : il est déduit du prénom. Les candidatures dont le prénom est épicène ou inconnu sont exclues de l’analyse.</p>
+    <div class="test" id="inference"></div>
+    <p class="note" id="inference-note"></p>
+  </article>
+
+  <details class="method" id="methodologie">
+    <summary>Méthodologie</summary>
+    <div class="method-body">
+      <h3>1. D’où viennent les données ?</h3>
+      <p>Des candidatures d’Equitera : la feuille Candidatures de Google Sheets, lue en direct par le même scénario Make que le reste du site, ou le jeu de démonstration du site si Make ne répond pas. Ce sont des données fictives : aucune vraie personne n’est concernée. Rien n’est modifié : la page lit les données, calcule dans le navigateur et n’enregistre rien.</p>
+      <h3>2. Comment sont-elles préparées ?</h3>
+      <ul>
+        <li><strong>Prénom.</strong> Premier mot du nom du candidat, mis en minuscules et sans accents.</li>
+        <li><strong>Genre déduit.</strong> Le prénom est cherché dans un dictionnaire d’environ 38 000 prénoms (dictionnaire nam_dict de Jörg Michael, utilisé par la bibliothèque gender-guesser, complété pour des prénoms courants en France). Les prénoms épicènes (Camille, Dominique, Sacha…) et les prénoms inconnus sont classés « indéterminé » et exclus.</li>
+        <li><strong>Décision de l’algorithme.</strong> Retenu : statut Accepté. Refusé : tout refus proposé par l’outil (à revoir, validé ou annulé). Les candidatures en attente sont exclues.</li>
+        <li><strong>Décision finale.</strong> Retenu : accepté, ou refus annulé par un humain. Refusé : refus validé par un humain. Les refus encore en attente de revue sont exclus.</li>
+      </ul>
+      <h3>3. Quels indicateurs sont calculés ?</h3>
+      <p class="formula">Taux de sélection d’un groupe = retenus du groupe ÷ candidats du groupe</p>
+      <p class="formula">Écart entre les taux = taux le plus haut − taux le plus bas, en points de pourcentage</p>
+      <p class="formula">Ratio de sélection (ou ratio d’impact) = taux du groupe ÷ taux du groupe de référence (le meilleur taux)</p>
+      <p class="formula">Intervalle de Wilson à 95 % : (p + z²/2n ± z·√(p(1−p)/n + z²/4n²)) ÷ (1 + z²/n), avec z = 1,96</p>
+      <p class="formula">Khi-deux d’indépendance : χ² = Σ (observé − attendu)² ÷ attendu, avec attendu = total de la ligne × total de la colonne ÷ effectif total ; ddl = nombre de groupes − 1</p>
+      <p class="formula">V de Cramér = √(χ² ÷ N) pour une décision à deux modalités : 0,1 effet faible, 0,3 moyen, 0,5 fort</p>
+      <p class="formula">Test de Cochran-Mantel-Haenszel (vue par poste) : χ²MH = (|Σ aₖ − Σ E(aₖ)| − 0,5)² ÷ Σ Var(aₖ), sur les tableaux 2 × 2 femmes-hommes de chaque poste ; odds ratio commun = Σ(aₖdₖ/nₖ) ÷ Σ(bₖcₖ/nₖ). Il teste l’écart à poste égal, en neutralisant l’effet du poste.</p>
+      <p class="formula">Test exact de Fisher (bilatéral) : compare chaque groupe au groupe de référence dans un tableau 2 × 2, sans approximation, même pour de petits effectifs</p>
+      <h3>4. Comment les seuils sont-ils choisis ?</h3>
+      <ul>
+        <li><strong>Règle des quatre cinquièmes (0,8).</strong> Repère issu des lignes directrices américaines sur la sélection du personnel (1978), très utilisé pour détecter un impact défavorable. Ce n’est pas une règle du droit français : c’est un signal d’alerte, pas une preuve.</li>
+        <li><strong>Seuil de significativité α = 0,05.</strong> Une p-valeur inférieure signifie qu’un écart aussi grand aurait moins de 5 % de chances d’apparaître si la décision était indépendante du groupe.</li>
+        <li><strong>Choix du test.</strong> Pour comparer deux groupes, le khi-deux est utilisé quand tous les effectifs attendus atteignent 5 ; sinon, le test exact de Fisher, qui ne repose sur aucune approximation. Pour comparer femmes et hommes à poste égal, le test de Cochran-Mantel-Haenszel. Le test retenu et sa raison sont affichés sous les résultats.</li>
+        <li><strong>Lecture combinée.</strong> Écart significatif et ratio sous 0,8 : alerte. Un seul des deux signaux : écart à surveiller. Sinon : pas d’écart détecté.</li>
+      </ul>
+      <h3>5. Quelles sont les limites ?</h3>
+      <ul>
+        <li><strong>L’inférence du genre est imparfaite.</strong> Elle est binaire, se trompe sur certains prénoms et ne dit rien de l’identité réelle des personnes. Elle sert uniquement à des statistiques agrégées, jamais à juger une personne, et n’est affichée pour aucun candidat.</li>
+        <li><strong>Pas d’autre variable protégée.</strong> L’âge n’est pas une colonne des données : il ne peut pas être analysé ici. Déduire une origine à partir d’un prénom serait encore moins fiable et n’est pas fait.</li>
+        <li><strong>Un écart ne prouve pas une discrimination.</strong> Il peut venir d’une variable légitime, comme le poste visé : d’où l’analyse par poste.</li>
+        <li><strong>Tests multiples.</strong> Avec k comparaisons, la correction de Bonferroni (α ÷ k) limite les fausses alertes.</li>
+        <li><strong>Petits effectifs.</strong> Par poste, les groupes sont petits : les intervalles de confiance sont larges et le test de Fisher est plus fiable que le khi-deux.</li>
+        <li><strong>En entreprise.</strong> Déduire le genre est un traitement de données personnelles : il faudrait une finalité d’audit documentée, des résultats uniquement agrégés et une mention dans l’analyse d’impact (AIPD).</li>
+      </ul>
+    </div>
+  </details>
+
+  <p class="foot">Equitera, prototype universitaire. Les résultats portent sur des données de démonstration et illustrent une méthode d’audit ; ils ne servent pas à évaluer de vraies personnes.</p>
+</div>
+
+<script type="module">
+import DEMO from "./demo-data.js";
+import { FEMMES, HOMMES, EPICENES } from "./prenoms.js";
+
+const WEBHOOK_CANDIDATURES = "https://hook.eu1.make.com/dc639a6swkt1fifbyla4b1oxfnyuo2zg";
+const C = { NOM: "1", POSTE: "2", STATUT: "5", CRITERE: "6" };
+
+// ===================== Statistiques =====================
+function lnGamma(z) {
+  const g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z);
+  z -= 1; let x = c[0];
+  for (let i = 1; i < g + 2; i++) x += c[i] / (z + i);
+  const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+function gammaQ(a, x) {
+  if (x <= 0) return 1;
+  if (x < a + 1) {
+    let sum = 1 / a, del = sum, ap = a;
+    for (let n = 0; n < 500; n++) { ap += 1; del *= x / ap; sum += del; if (Math.abs(del) < Math.abs(sum) * 1e-14) break; }
+    return 1 - sum * Math.exp(-x + a * Math.log(x) - lnGamma(a));
+  }
+  let b = x + 1 - a, c = 1e300, d = 1 / b, h = d;
+  for (let i = 1; i < 500; i++) {
+    const an = -i * (i - a); b += 2;
+    d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300;
+    c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300;
+    d = 1 / d; const del = d * c; h *= del;
+    if (Math.abs(del - 1) < 1e-14) break;
+  }
+  return Math.exp(-x + a * Math.log(x) - lnGamma(a)) * h;
+}
+function khiDeux(groupes) {
+  const N = groupes.reduce((s, g) => s + g.n, 0), R = groupes.reduce((s, g) => s + g.k, 0);
+  let chi2 = 0, minAttendu = Infinity;
+  groupes.forEach((g) => {
+    const eR = (g.n * R) / N, eF = (g.n * (N - R)) / N;
+    minAttendu = Math.min(minAttendu, eR, eF);
+    if (eR > 0) chi2 += (g.k - eR) ** 2 / eR;
+    if (eF > 0) chi2 += (g.n - g.k - eF) ** 2 / eF;
+  });
+  const ddl = groupes.length - 1;
+  return { chi2, ddl, p: ddl > 0 ? gammaQ(ddl / 2, chi2 / 2) : 1, v: N ? Math.sqrt(chi2 / N) : 0, minAttendu };
+}
+const lnFact = (n) => lnGamma(n + 1);
+function fisher(a, b, c, d) {
+  const r1 = a + b, r2 = c + d, c1 = a + c, n = r1 + r2;
+  const proba = (x) => Math.exp(lnFact(r1) + lnFact(r2) + lnFact(c1) + lnFact(n - c1) - lnFact(n) - lnFact(x) - lnFact(r1 - x) - lnFact(c1 - x) - lnFact(r2 - c1 + x));
+  const pObs = proba(a);
+  let p = 0;
+  for (let x = Math.max(0, c1 - r2); x <= Math.min(r1, c1); x++) { const px = proba(x); if (px <= pObs * (1 + 1e-7)) p += px; }
+  return Math.min(1, p);
+}
+// Test de Cochran-Mantel-Haenszel : écart femmes-hommes à poste égal (tableaux 2 × 2 par poste)
+function mantelHaenszel(strates) {
+  let somme = 0, attendu = 0, variance = 0, num = 0, den = 0;
+  strates.forEach(({ f, h }) => {
+    const a = f.k, b = f.n - f.k, c = h.k, d = h.n - h.k, n = a + b + c + d;
+    if (n < 2) return;
+    somme += a; attendu += ((a + b) * (a + c)) / n;
+    variance += ((a + b) * (c + d) * (a + c) * (b + d)) / (n * n * (n - 1));
+    num += (a * d) / n; den += (b * c) / n;
+  });
+  const chi2 = variance ? Math.max(0, Math.abs(somme - attendu) - 0.5) ** 2 / variance : 0;
+  return { chi2, ddl: 1, p: variance ? gammaQ(0.5, chi2 / 2) : 1, or: den ? num / den : null };
+}
+function wilson(k, n, z = 1.96) {
+  if (!n) return [0, 0];
+  const p = k / n, den = 1 + (z * z) / n;
+  const centre = (p + (z * z) / (2 * n)) / den;
+  const demi = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / den;
+  return [Math.max(0, centre - demi), Math.min(1, centre + demi)];
+}
+
+// ===================== Préparation des données =====================
+const $ = (id) => document.getElementById(id);
+const fr = (x, d = 1) => x.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pc = (x) => fr(x * 100, 1) + " %";
+const fp = (p) => (p < 0.001 ? "< 0,001" : fr(p, 3));
+const fpPhrase = (p) => (p < 0.001 ? "inférieure à 0,001" : "de " + fr(p, 3));
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sansAccent = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+let parametres = { interdits: ["Age", "Localisation", "Lieu de résidence", "Situation familiale", "Sexe", "Origine", "Handicap", "Religion", "Grossesse"], suspects: ["Trou dans le parcours", "Continuité du parcours", "Disponibilité immédiate", "Disponibilite"] };
+try { const p = JSON.parse(localStorage.getItem("eq-parametres") || "null"); if (p) parametres = { ...parametres, ...p }; } catch (e) {}
+function niveau(critere) {
+  const n = sansAccent(critere);
+  if (parametres.interdits.some((x) => sansAccent(x) === n)) return "bad";
+  if (parametres.suspects.some((x) => sansAccent(x) === n)) return "warn";
+  return "ok";
+}
+const LIB_NIVEAU = { bad: "interdit", warn: "suspect", ok: "légitime" };
+
+function genreDuPrenom(nom) {
+  const brut = sansAccent(String(nom || "").split(/\s+/)[0]);
+  const prenom = brut.split("-")[0] === brut ? brut : brut; // prénom composé : on garde la forme complète
+  if (!prenom) return { prenom, genre: "Indéterminé", raison: "vide" };
+  if (EPICENES.has(prenom)) return { prenom, genre: "Indéterminé", raison: "épicène" };
+  if (FEMMES.has(prenom)) return { prenom, genre: "Femme" };
+  if (HOMMES.has(prenom)) return { prenom, genre: "Homme" };
+  const premier = prenom.split("-")[0];
+  if (premier !== prenom) {
+    if (FEMMES.has(premier)) return { prenom, genre: "Femme" };
+    if (HOMMES.has(premier)) return { prenom, genre: "Homme" };
+  }
+  return { prenom, genre: "Indéterminé", raison: "inconnu" };
+}
+function decisionAlgo(statut) {
+  if (statut === "Accepte") return "retenu";
+  if (String(statut).startsWith("Refuse")) return "refuse";
+  return null;
+}
+function decisionFinale(statut) {
+  if (statut === "Accepte" || statut === "Refuse_annule") return "retenu";
+  if (statut === "Refuse_valide") return "refuse";
+  return null;
+}
+
+let lignes = [];
+let source = "";
+
+async function charger() {
+  let brutes = [];
+  try {
+    const r = await fetch(WEBHOOK_CANDIDATURES);
+    const json = await r.json();
+    brutes = (json.array || []).filter((l) => l["0"] !== null && l["0"] !== undefined && l["0"] !== "");
+    source = `Source : ${brutes.length} candidatures lues en direct dans Google Sheets`;
+  } catch (e) { brutes = []; }
+  if (!brutes.length) {
+    brutes = (DEMO && DEMO.candidatures) || [];
+    source = `Source : ${brutes.length} candidatures du jeu de démonstration du site`;
+  }
+  lignes = brutes.map((c) => {
+    const g = genreDuPrenom(c[C.NOM]);
+    const sc = parseFloat(String(c["4"] ?? "").replace(",", "."));
+    return { genre: g.genre, raison: g.raison, prenom: g.prenom, poste: c[C.POSTE] || "Non renseigné", statut: c[C.STATUT], critere: c[C.CRITERE] || "", score: Number.isFinite(sc) ? sc : null };
+  });
+  $("source").textContent = source;
+  const postes = [...new Set(lignes.map((l) => l.poste))].sort((a, b) => a.localeCompare(b, "fr"));
+  $("poste").innerHTML = `<option value="">Tous les postes</option>` + postes.map((p) => `<option>${esc(p)}</option>`).join("");
+  rendreInference();
+  analyser();
+}
+
+// ===================== Analyse =====================
+function grouper(sel, variable, mode) {
+  const map = new Map();
+  sel.forEach((l) => {
+    const d = mode === "algo" ? decisionAlgo(l.statut) : decisionFinale(l.statut);
+    if (!d || l.genre === "Indéterminé") return;
+    const nom = variable === "genre_poste" ? `${l.genre} · ${l.poste}` : l.genre;
+    if (!map.has(nom)) map.set(nom, { nom, n: 0, k: 0, lignes: [] });
+    const x = map.get(nom); x.n++; if (d === "retenu") x.k++; x.lignes.push(l);
+  });
+  const posteDe = (nom) => nom.split(" · ")[1] || "";
+  const groupes = [...map.values()].sort((a, b) => posteDe(a.nom).localeCompare(posteDe(b.nom), "fr") || a.nom.localeCompare(b.nom, "fr"));
+  groupes.forEach((g) => { g.taux = g.n ? g.k / g.n : 0; g.ic = wilson(g.k, g.n); });
+  const meilleur = (liste) => liste.reduce((m, g) => (!m || g.taux > m.taux ? g : m), null);
+  const ref = meilleur(groupes);
+  groupes.forEach((g) => {
+    // Par poste, on compare les femmes et les hommes du même poste : le poste n’influence plus la comparaison
+    g.ref = variable === "genre_poste" ? meilleur(groupes.filter((x) => posteDe(x.nom) === posteDe(g.nom))) : ref;
+    g.ratio = g.ref && g.ref.taux ? g.taux / g.ref.taux : 1;
+    g.p = g === g.ref ? null : fisher(g.k, g.n - g.k, g.ref.k, g.ref.n - g.ref.k);
+    g.etat = g === g.ref ? "ref" : g.ratio < 0.8 && g.p < 0.05 ? "bad" : g.ratio < 0.8 || g.p < 0.05 ? "warn" : "ok";
+  });
+  return { groupes, ref };
+}
+
+let derniers = [];
+function analyser() {
+  const variable = $("variable").value, mode = $("decision").value, poste = $("poste").value;
+  const sel = lignes.filter((l) => !poste || l.poste === poste);
+  const { groupes, ref } = grouper(sel, variable, mode);
+  derniers = groupes;
+  let test = groupes.length > 1 ? khiDeux(groupes) : { chi2: 0, ddl: 0, p: 1, v: 0, minAttendu: Infinity };
+  test.nom = "khi-deux";
+  if (groupes.length === 2) {
+    // Deux groupes : khi-deux si tous les effectifs attendus atteignent 5, sinon test exact de Fisher
+    const autre = groupes.find((g) => g.p !== null);
+    test.pKhi = test.p; test.pFisher = autre ? autre.p : 1;
+    if (test.minAttendu < 5) { test.p = test.pFisher; test.nom = "test exact de Fisher"; }
+    test.choix = test.minAttendu < 5
+      ? `Test retenu : test exact de Fisher, car un effectif attendu est inférieur à 5 (${fr(test.minAttendu, 1)}). Le khi-deux donnerait p ${test.pKhi < 0.001 ? "< 0,001" : "= " + fr(test.pKhi, 3)}.`
+      : `Test retenu : khi-deux, car tous les effectifs attendus atteignent 5 (minimum ${fr(test.minAttendu, 1)}). Le test exact de Fisher confirme : p ${test.pFisher < 0.001 ? "< 0,001" : "= " + fr(test.pFisher, 3)}.`;
+  }
+  if (variable === "genre_poste") {
+    const postes = [...new Set(groupes.map((g) => g.nom.split(" · ")[1]))];
+    const strates = postes.map((p) => ({ f: groupes.find((g) => g.nom === `Femme · ${p}`), h: groupes.find((g) => g.nom === `Homme · ${p}`) })).filter((x) => x.f && x.h);
+    test = { ...mantelHaenszel(strates), mh: true, strates: strates.length, minAttendu: Infinity, nom: "Mantel-Haenszel" };
+  }
+  rendre(groupes, ref, test, variable, mode);
+  rendreAvantApres(sel);
+  graphHisto(sel);
+  graphRepartition(sel, groupes, variable);
+  rendreCriteres(sel, groupes, variable);
+}
+
+function rendre(groupes, ref, test, variable, mode) {
+  const total = groupes.reduce((s, g) => s + g.n, 0), retenus = groupes.reduce((s, g) => s + g.k, 0);
+  const pire = groupes.filter((g) => g !== ref).reduce((m, g) => (!m || g.ratio < m.ratio ? g : m), null);
+  const tauxListe = groupes.map((g) => g.taux);
+  const ecartPts = tauxListe.length > 1 ? (Math.max(...tauxListe) - Math.min(...tauxListe)) * 100 : 0;
+  $("kpis").innerHTML = `
+    <div class="kpi"><b>${total}</b><span>candidatures analysées (${mode === "algo" ? "décision de l’algorithme" : "décision finale"})</span></div>
+    <div class="kpi"><b>${retenus}</b><span>candidats retenus (${pc(total ? retenus / total : 0)})</span></div>
+    <div class="kpi"><b>${total - retenus}</b><span>candidats refusés (${pc(total ? (total - retenus) / total : 0)})</span></div>
+    <div class="kpi ${ecartPts >= 20 ? "bad" : ecartPts >= 10 ? "warn" : "ok"}"><b>${fr(ecartPts, 1)} pts</b><span>écart entre le taux le plus haut et le plus bas</span></div>
+    <div class="kpi ${pire && pire.ratio < 0.8 ? "bad" : "ok"}"><b>${pire ? fr(pire.ratio, 2) : "-"}</b><span>plus faible ratio de sélection${pire ? ` : ${esc(pire.nom)}` : ""} (seuil 0,8)</span></div>
+    <div class="kpi ${test.p < 0.05 ? "bad" : "ok"}"><b>${groupes.length > 1 ? fp(test.p) : "-"}</b><span>p-valeur, ${test.nom || "khi-deux"} (seuil 0,05)</span></div>`;
+
+  const alertes = groupes.filter((g) => g.etat === "bad"), surveiller = groupes.filter((g) => g.etat === "warn");
+  let v;
+  if (groupes.length < 2) v = `<div class="verdict warn"><strong>Pas assez de groupes</strong><p>Il faut au moins deux groupes avec des décisions pour comparer des taux.</p></div>`;
+  else if (alertes.length) v = `<div class="verdict bad"><strong>Écart significatif : ${alertes.map((g) => esc(g.nom)).join(", ")}</strong><p>${alertes.length > 2
+      ? `Par rapport au groupe de référence${variable === "genre_poste" ? " de leur poste" : ` (${esc(ref.nom)}, ${pc(ref.taux)} de sélection)`}, ces groupes ont un ratio de sélection sous 0,8 et un écart significatif au test de Fisher : ${alertes.map((g) => `${esc(g.nom)} (${pc(g.taux)}, ratio ${fr(g.ratio, 2)})`).join(", ")}.`
+      : alertes.map((g) => `Groupe ${esc(g.nom)} : taux de sélection de ${pc(g.taux)}, contre ${pc(g.ref.taux)} pour ${esc(g.ref.nom)}, soit un ratio de sélection de ${fr(g.ratio, 2)} (sous 0,8) et une p-valeur de Fisher ${fpPhrase(g.p)}.`).join(" ")} Cet écart ne prouve pas à lui seul une discrimination, mais il impose d’examiner les règles de tri : voir les critères des refus plus bas.</p></div>`;
+  else if (surveiller.length) v = `<div class="verdict warn"><strong>Écart à surveiller : ${surveiller.map((g) => esc(g.nom)).join(", ")}</strong><p>${surveiller.map((g) => g.p < 0.05
+      ? `Groupe ${esc(g.nom)} : l’écart avec ${esc(g.ref.nom)} est significatif (p-valeur de Fisher ${fpPhrase(g.p)}), mais le ratio de sélection de ${fr(g.ratio, 2)} reste au-dessus de 0,8.`
+      : `Groupe ${esc(g.nom)} : le ratio de sélection de ${fr(g.ratio, 2)} passe sous 0,8, mais l’écart n’est pas significatif (p-valeur ${fpPhrase(g.p)}) : les effectifs sont trop faibles pour conclure.`).join(" ")} Un seul des deux signaux est présent : il faut suivre ces groupes, par exemple poste par poste.</p></div>`;
+  else v = `<div class="verdict ok"><strong>Pas d’écart détecté</strong><p>Tous les ratios de sélection sont au-dessus de 0,8 et aucun écart n’est significatif au seuil de 5 %.</p></div>`;
+  $("verdict").innerHTML = v;
+
+  graphTaux(groupes, ref, variable === "genre_poste");
+
+  $("test").innerHTML = test.mh ? `
+    <div><b>${fr(test.chi2, 2)}</b><span>χ² de Mantel-Haenszel</span></div>
+    <div><b>1</b><span>degré de liberté</span></div>
+    <div><b>${fp(test.p)}</b><span>p-valeur</span></div>
+    <div><b>${test.or === null ? "-" : fr(test.or, 2)}</b><span>odds ratio commun (femmes ÷ hommes)</span></div>` : `
+    <div><b>${fr(test.chi2, 2)}</b><span>χ² observé</span></div>
+    <div><b>${test.ddl}</b><span>degrés de liberté</span></div>
+    <div><b>${groupes.length > 1 ? fp(test.p) : "-"}</b><span>p-valeur</span></div>
+    <div><b>${fr(test.v, 2)}</b><span>V de Cramér</span></div>`;
+  const force = test.v < 0.1 ? "négligeable" : test.v < 0.3 ? "faible" : test.v < 0.5 ? "moyen" : "fort";
+  $("test-note").className = "note" + (test.minAttendu < 5 ? " warn" : "");
+  $("test-note").innerHTML = test.mh
+    ? `Test de Cochran-Mantel-Haenszel sur ${test.strates} postes : il compare femmes et hommes à poste égal. ${test.p < 0.05 ? `À poste égal, l’écart entre femmes et hommes est significatif (p-valeur ${fpPhrase(test.p)}).` : "À poste égal, l’écart entre femmes et hommes n’est pas significatif au seuil de 5 %."} Un odds ratio inférieur à 1 signifie que les femmes ont moins de chances d’être retenues que les hommes du même poste.`
+    : groupes.length < 2 ? "" : (test.p < 0.05
+    ? `La décision dépend significativement du groupe (p-valeur ${fpPhrase(test.p)}), avec un effet ${force}.`
+    : `Au seuil de 5 %, on ne peut pas rejeter l’hypothèse que la décision est indépendante du groupe (effet ${force}).`)
+    + (test.choix ? ` ${test.choix}` : test.minAttendu < 5 ? ` Attention : un effectif attendu est inférieur à 5 (${fr(test.minAttendu, 1)}), le khi-deux est moins fiable ; fiez-vous aux tests de Fisher par paire.` : "");
+
+  $("table-sub").textContent = variable === "genre_poste" ? "Dans chaque poste, le groupe au taux le plus bas est comparé à celui au taux le plus haut du même poste." : "Chaque groupe est comparé au groupe de référence, celui qui a le meilleur taux de sélection.";
+  const k = groupes.filter((g) => g.p !== null).length;
+  $("table").innerHTML = `<tr><th>Groupe</th><th class="num">Candidats</th><th class="num">Retenus</th><th class="num">Taux de sélection</th><th class="num">IC à 95 %</th><th class="num">Ratio de sélection</th><th class="num">p (Fisher)</th><th>État</th></tr>` +
+    groupes.map((g) => `<tr><td><strong>${esc(g.nom)}</strong></td><td class="num">${g.n}</td><td class="num">${g.k}</td><td class="num">${pc(g.taux)}</td><td class="num">${pc(g.ic[0])} à ${pc(g.ic[1])}</td><td class="num">${fr(g.ratio, 2)}</td><td class="num">${g.p === null ? "-" : fp(g.p)}</td><td>${
+      g.etat === "ref" ? `<span class="tag ref">Référence</span>` : g.etat === "bad" ? `<span class="tag bad">Alerte</span>` : g.etat === "warn" ? `<span class="tag warn">À surveiller</span>` : `<span class="tag ok">Pas d’écart</span>`}</td></tr>`).join("") +
+    (k > 1 ? `<tr><td colspan="8" class="note">Avec ${k} comparaisons, le seuil corrigé de Bonferroni est de ${fr(0.05 / k, 4)}.</td></tr>` : "");
+}
+
+function rendreAvantApres(sel) {
+  const ligne = (mode, libelle) => {
+    const { groupes } = grouper(sel, "genre", mode);
+    const f = groupes.find((g) => g.nom === "Femme"), h = groupes.find((g) => g.nom === "Homme");
+    if (!f || !h) return `<tr><td>${libelle}</td><td colspan="5">Données insuffisantes</td></tr>`;
+    const ratio = Math.min(f.taux, h.taux) / Math.max(f.taux, h.taux || 1);
+    const p = fisher(f.k, f.n - f.k, h.k, h.n - h.k);
+    return `<tr><td><strong>${libelle}</strong></td><td class="num">${pc(f.taux)} (n = ${f.n})</td><td class="num">${pc(h.taux)} (n = ${h.n})</td><td class="num">${fr(Math.abs(f.taux - h.taux) * 100, 1)} pts</td><td class="num">${fr(ratio, 2)}</td><td class="num">${fp(p)}</td></tr>`;
+  };
+  $("avant-apres").innerHTML = `<tr><th>Décision</th><th class="num">Taux femmes</th><th class="num">Taux hommes</th><th class="num">Écart</th><th class="num">Ratio de sélection</th><th class="num">p (Fisher)</th></tr>`
+    + ligne("algo", "Algorithme seul") + ligne("finale", "Après revue humaine");
+}
+
+function rendreCriteres(sel, groupes, variable) {
+  const refus = sel.filter((l) => decisionAlgo(l.statut) === "refuse" && l.genre !== "Indéterminé");
+  const criteres = [...new Set(refus.map((l) => l.critere).filter(Boolean))]
+    .sort((a, b) => ["bad", "warn", "ok"].indexOf(niveau(a)) - ["bad", "warn", "ok"].indexOf(niveau(b)) || a.localeCompare(b, "fr"));
+  const noms = variable === "genre_poste" ? [...new Set(groupes.map((g) => g.nom))] : ["Femme", "Homme"];
+  $("criteres").innerHTML = `<tr><th>Groupe</th><th class="num">Refus</th>${criteres.map((c) => `<th class="num">${esc(c)} <span class="tag ${niveau(c)}" style="margin-left:4px">${LIB_NIVEAU[niveau(c)]}</span></th>`).join("")}</tr>` +
+    noms.map((nom) => {
+      const r = refus.filter((l) => (variable === "genre_poste" ? `${l.genre} · ${l.poste}` : l.genre) === nom);
+      return `<tr><td><strong>${esc(nom)}</strong></td><td class="num">${r.length}</td>${criteres.map((c) => { const n = r.filter((l) => l.critere === c).length; const part = r.length ? n / r.length : 0; const fort = part >= 0.3 && niveau(c) !== "ok"; return `<td class="num"${fort ? ' style="color:var(--bad);font-weight:800"' : ""}>${n ? `${n} (${Math.round(part * 100)} %)` : "-"}</td>`; }).join("")}</tr>`;
+    }).join("");
+}
+
+function rendreInference() {
+  const n = lignes.length;
+  const f = lignes.filter((l) => l.genre === "Femme").length, h = lignes.filter((l) => l.genre === "Homme").length;
+  const epi = lignes.filter((l) => l.raison === "épicène").length, inc = lignes.filter((l) => l.raison === "inconnu" || l.raison === "vide").length;
+  $("inference").innerHTML = `
+    <div><b>${pc(n ? (f + h) / n : 0)}</b><span>des candidatures classées</span></div>
+    <div><b>${f}</b><span>femmes</span></div>
+    <div><b>${h}</b><span>hommes</span></div>
+    <div><b>${epi}</b><span>prénoms épicènes exclus</span></div>
+    <div><b>${inc}</b><span>prénoms inconnus exclus</span></div>`;
+  const inconnus = [...new Set(lignes.filter((l) => l.raison === "inconnu").map((l) => l.prenom))].sort();
+  $("inference-note").textContent = inconnus.length
+    ? `Prénoms non reconnus (${inconnus.length}) : ${inconnus.slice(0, 40).join(", ")}${inconnus.length > 40 ? "…" : ""}. Ils peuvent être ajoutés au dictionnaire prenoms.js.`
+    : "Tous les prénoms non épicènes ont été reconnus.";
+}
+
+
+// ===================== Graphiques interactifs (Chart.js) =====================
+const graphes = {};
+function dessiner(id, config) {
+  if (graphes[id]) graphes[id].destroy();
+  if (!window.Chart) { document.getElementById(id).parentElement.innerHTML = `<p class="vide">Graphique indisponible : la bibliothèque Chart.js n’a pas pu être chargée.</p>`; return; }
+  Chart.defaults.font.family = '"Plus Jakarta Sans", system-ui, sans-serif';
+  Chart.defaults.color = "#5d6685";
+  graphes[id] = new Chart(document.getElementById(id), config);
+}
+const pluginIntervalles = {
+  id: "intervalles",
+  afterDatasetsDraw(chart) {
+    const gs = chart.$groupes; if (!gs) return;
+    const { ctx, chartArea, scales: { y } } = chart;
+    const barres = chart.getDatasetMeta(0).data;
+    ctx.save();
+    ctx.strokeStyle = "#101a3f"; ctx.lineWidth = 2;
+    barres.forEach((barre, i) => {
+      const g = gs[i]; if (!g) return;
+      const y1 = y.getPixelForValue(g.ic[1] * 100), y0 = y.getPixelForValue(g.ic[0] * 100);
+      ctx.beginPath(); ctx.moveTo(barre.x, y1); ctx.lineTo(barre.x, y0);
+      ctx.moveTo(barre.x - 6, y1); ctx.lineTo(barre.x + 6, y1); ctx.moveTo(barre.x - 6, y0); ctx.lineTo(barre.x + 6, y0); ctx.stroke();
+    });
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = "#d92d48"; ctx.fillStyle = "#d92d48"; ctx.font = "700 11px 'Plus Jakarta Sans', sans-serif";
+    const trait = (x1, x2, taux, texte) => {
+      const yy = y.getPixelForValue(0.8 * taux * 100);
+      ctx.beginPath(); ctx.moveTo(x1, yy); ctx.lineTo(x2, yy); ctx.stroke();
+      if (texte) { ctx.textAlign = "right"; ctx.fillText(texte, x2, yy - 6); }
+    };
+    if (!chart.$croise) trait(chartArea.left, chartArea.right, chart.$ref.taux, `seuil 4/5 : ${Math.round(0.8 * chart.$ref.taux * 100)} %`);
+    else gs.filter((g) => g === g.ref).forEach((r) => {
+      const idx = gs.map((g, i) => (g.ref === r ? i : -1)).filter((i) => i >= 0);
+      const w = barres[idx[0]].width || 20;
+      trait(barres[Math.min(...idx)].x - w * 0.8, barres[Math.max(...idx)].x + w * 0.8, r.taux, "");
+    });
+    ctx.restore();
+  },
+};
+function graphTaux(groupes, ref, croise) {
+  const couleur = (g) => (g.etat === "bad" ? "#d92d48" : g.etat === "warn" ? "#f79009" : g.etat === "ref" ? "#101a3f" : "#5b4cf0");
+  dessiner("chart-taux", {
+    type: "bar",
+    data: { labels: groupes.map((g) => g.nom), datasets: [{ label: "Taux de sélection", data: groupes.map((g) => +(g.taux * 100).toFixed(1)), backgroundColor: groupes.map(couleur), borderRadius: 8, maxBarThickness: 70 }] },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: (it) => groupes[it[0].dataIndex].nom,
+          label: (it) => {
+            const g = groupes[it.dataIndex];
+            return [`${pc(g.taux)} retenus (${g.k} sur ${g.n})`, `IC à 95 % : ${pc(g.ic[0])} à ${pc(g.ic[1])}`, `Ratio de sélection : ${fr(g.ratio, 2)}`, g.p === null ? "Groupe de référence" : `p-valeur de Fisher : ${fp(g.p)}`];
+          },
+        } },
+      },
+      scales: {
+        y: { min: 0, max: 100, ticks: { callback: (v) => v + " %" }, grid: { color: "#e1e5f2" } },
+        x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: croise ? 50 : 0, font: { weight: "700" } } },
+      },
+    },
+    plugins: [pluginIntervalles],
+  });
+  graphes["chart-taux"].$groupes = groupes; graphes["chart-taux"].$ref = ref; graphes["chart-taux"].$croise = croise;
+  graphes["chart-taux"].update("none");
+}
+function graphHisto(sel) {
+  const tranches = Array.from({ length: 10 }, (_, i) => `${i * 10}-${i * 10 + 9}`);
+  tranches[9] = "90-100";
+  const series = ["Femme", "Homme"].map((genre) => {
+    const scores = sel.filter((l) => l.genre === genre && l.score !== null).map((l) => l.score);
+    const comptes = new Array(10).fill(0);
+    scores.forEach((v) => { comptes[Math.min(9, Math.max(0, Math.floor(v / 10)))]++; });
+    const tri = [...scores].sort((a, b) => a - b);
+    const mediane = tri.length ? (tri.length % 2 ? tri[(tri.length - 1) / 2] : (tri[tri.length / 2 - 1] + tri[tri.length / 2]) / 2) : null;
+    return { genre, n: scores.length, comptes, moyenne: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null, mediane };
+  });
+  if (!series.some((x) => x.n)) {
+    if (graphes["chart-histo"]) { graphes["chart-histo"].destroy(); delete graphes["chart-histo"]; }
+    $("histo-sub").textContent = "Aucun score disponible dans les données.";
+    return;
+  }
+  $("histo-sub").textContent = `Part des candidats de chaque groupe par tranche de score. ${series.filter((x) => x.n).map((x) => `${x.genre}s : moyenne ${fr(x.moyenne, 1)}, médiane ${fr(x.mediane, 1)} (n = ${x.n})`).join(" ; ")}. Cliquez sur la légende pour masquer un groupe.`;
+  dessiner("chart-histo", {
+    type: "bar",
+    data: { labels: tranches, datasets: series.map((x, i) => ({ label: x.genre + "s", data: x.comptes.map((c) => (x.n ? +((c / x.n) * 100).toFixed(1) : 0)), backgroundColor: i ? "#ff7a59" : "#5b4cf0", borderRadius: 4, $comptes: x.comptes })) },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { usePointStyle: true, font: { weight: "700" } } },
+        tooltip: { callbacks: { title: (it) => `Score ${it[0].label}`, label: (it) => `${it.dataset.label} : ${fr(it.parsed.y, 1)} % (${it.dataset.$comptes[it.dataIndex]} candidats)` } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: (v) => v + " %" }, grid: { color: "#e1e5f2" }, title: { display: true, text: "part du groupe" } }, x: { grid: { display: false }, title: { display: true, text: "score de l’algorithme" } } },
+    },
+  });
+}
+function graphRepartition(sel, groupes, variable) {
+  const STATUTS = [["Accepte", "Accepté", "#12a150"], ["Refuse_annule", "Refus annulé par un humain", "#5b4cf0"], ["Refuse_valide", "Refus validé par un humain", "#d92d48"], ["Refuse_auto", "Refus à revoir", "#f79009"], ["En_attente", "En attente", "#c9cede"]];
+  const noms = groupes.map((g) => g.nom);
+  const cle = (l) => (variable === "genre_poste" ? `${l.genre} · ${l.poste}` : l.genre);
+  const parGroupe = noms.map((nom) => sel.filter((l) => l.genre !== "Indéterminé" && cle(l) === nom));
+  dessiner("chart-repartition", {
+    type: "bar",
+    data: { labels: noms, datasets: STATUTS.map(([code, lib, col]) => {
+      const comptes = parGroupe.map((ls) => ls.filter((l) => l.statut === code).length);
+      return { label: lib, data: comptes.map((c, i) => (parGroupe[i].length ? +((c / parGroupe[i].length) * 100).toFixed(1) : 0)), backgroundColor: col, $comptes: comptes };
+    }) },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, font: { weight: "700", size: 11 } } },
+        tooltip: { callbacks: { label: (it) => `${it.dataset.label} : ${fr(it.parsed.y, 1)} % (${it.dataset.$comptes[it.dataIndex]})` } } },
+      scales: { x: { stacked: true, grid: { display: false }, ticks: { autoSkip: false, maxRotation: variable === "genre_poste" ? 50 : 0, font: { weight: "700" } } }, y: { stacked: true, max: 100, ticks: { callback: (v) => v + " %" }, grid: { color: "#e1e5f2" } } },
+    },
+  });
+}
+
+// Export : uniquement les résultats agrégés, aucune donnée individuelle
+$("btn-csv").addEventListener("click", () => {
+  const entetes = ["groupe", "candidats", "retenus", "taux_selection", "ic95_bas", "ic95_haut", "ratio_impact", "p_fisher"];
+  const csv = [entetes.join(";"), ...derniers.map((g) => [g.nom, g.n, g.k, g.taux.toFixed(4), g.ic[0].toFixed(4), g.ic[1].toFixed(4), g.ratio.toFixed(4), g.p === null ? "" : g.p.toFixed(6)].join(";"))].join("\n");
+  const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a"); a.href = url; a.download = "equitera_equite_par_groupe.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+["variable", "decision", "poste"].forEach((id) => $(id).addEventListener("change", analyser));
+charger();
+</script>
+</body>
+</html>

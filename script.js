@@ -4,6 +4,7 @@
 // =========================================================
 
 import DEMO from "./demo-data.js";
+import { FEMMES, HOMMES, EPICENES } from "./prenoms.js";
 
 // ----- Adresses des scénarios Make (inchangées) -----
 const WEBHOOK_CRITERES = "https://hook.eu1.make.com/a7dgmc7qd6467rbaujvfsx176xgpfl3o";
@@ -1039,31 +1040,82 @@ $("form-upload-cv").addEventListener("submit", async (e) => {
   reinitialiserDepot();
   rendreTout();
 
-  const n = r.refuse ? niveau(c[C.CRITERE]) : "";
-  const encadre = r.refuse
-    ? `<div class="callout ${n === "interdit" ? "danger" : n === "suspect" ? "warning" : "info"}"><strong>Aucun refus sans validation humaine</strong><p>Ce refus est placé dans la file de revue. Il ne sera communiqué au candidat qu'après la décision d'une personne.</p></div>`
-    : `<div class="callout info"><strong>Candidature retenue</strong><p>Le CV passe à l'étape suivante du recrutement.</p></div>`;
-  const stockage = enregistre
-    ? `<p class="muted-p">Candidature enregistrée dans Google Sheets. Analyse simulée pour la démonstration : le contenu du fichier n'est pas lu.</p>`
-    : `<div class="callout warning"><strong>Non enregistré dans Google Sheets</strong><p>Make n'a pas répondu : le CV reste visible jusqu'au rechargement de la page, et aucun email ne pourra être envoyé. Vérifiez que le scénario « ajouter-candidature » est actif.</p></div>`;
-  ouvrirModale(`Analyse de ${nom}`, `
-    <dl class="detail-list">
-      <dt>Fichier</dt><dd>${esc(fichier.name)}</dd>
-      <dt>Email</dt><dd>${esc(email)}</dd>
-      <dt>Poste</dt><dd>${esc(poste)}</dd>
-      <dt>Score de l'algorithme</dt><dd>${r.score} / 100</dd>
-      <dt>Proposition</dt><dd>${r.refuse ? badge("warn", "Refus proposé") : badge("ok", "Accepté")}</dd>
-      ${r.refuse ? `<dt>Critère déclencheur</dt><dd>${esc(c[C.CRITERE])} ${badgeNiveau(c[C.CRITERE])}</dd>` : ""}
-    </dl>
-    ${encadre}
-    ${stockage}`,
-    r.refuse
-      ? [{ texte: "Voir dans la file de revue", classe: peut("decider") ? "btn-outline" : "btn-primary", action: () => voirCandidat(c[C.ID], "review") },
-         ...(peut("decider") ? [{ texte: "Décider maintenant", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) }] : [])]
-      : voitVue("analyse") && utilisateur.role !== "recruteur"
-        ? [{ texte: "Fermer", action: fermerModale }, { texte: "Voir la candidature", classe: "btn-primary", action: () => voirCandidat(c[C.ID], "analyse") }]
-        : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }]);
+  afficherResultatCV(c, r, { fichier, nom, email, poste, enregistre });
 });
+
+// Fenêtre de résultat d'un CV : verdict, vérification des règles de tri, puis décision directe
+function afficherResultatCV(c, r, ctx) {
+  const n = r.refuse ? niveau(c[C.CRITERE]) : "";
+  const crit = norm(c[C.CRITERE]);
+  const correspond = (regle) => crit && (norm(regle["1"]).includes(crit) || crit.includes(norm(regle["1"])));
+  const regles = donnees.criteres.filter((x) => x["1"]);
+  const lignesRegles = regles.map((regle) => {
+    const ev = evaluerRegle(regle);
+    let resultat;
+    if (!ev.active) resultat = `<span class="muted">Règle désactivée</span>`;
+    else if (r.refuse && correspond(regle)) resultat = badge(n === "interdit" ? "bad" : n === "suspect" ? "warn" : "neutral", "✗ Bloquant");
+    else resultat = badge("ok", "✓ Conforme");
+    return `<tr${r.refuse && ev.active && correspond(regle) ? ' class="cv-bloquant"' : ""}><td>${esc(regle["1"])}</td><td>${badge(ev.type, ev.label)}</td><td>${resultat}</td></tr>`;
+  });
+  if (r.refuse && !regles.some(correspond)) {
+    lignesRegles.push(`<tr class="cv-bloquant"><td>${esc(c[C.CRITERE])}</td><td>${badgeNiveau(c[C.CRITERE])}</td><td>${badge(n === "interdit" ? "bad" : n === "suspect" ? "warn" : "neutral", "✗ Bloquant")}</td></tr>`);
+  }
+
+  const verdict = !r.refuse
+    ? { type: "ok", icone: "✓", titre: "Bon profil", texte: "L’algorithme retient ce CV : il passe à l’étape suivante du recrutement. Aucune décision n’est nécessaire." }
+    : n === "interdit"
+      ? { type: "bad", icone: "!", titre: "Refus proposé sur un critère interdit", texte: `L’algorithme veut refuser ce CV à cause de « ${esc(c[C.CRITERE])} ». Ce critère est interdit par l’article L1132-1 du Code du travail : ce refus ne peut pas être validé.` }
+      : n === "suspect"
+        ? { type: "warn", icone: "?", titre: "Refus proposé sur un critère suspect", texte: `L’algorithme veut refuser ce CV à cause de « ${esc(c[C.CRITERE])} ». Ce critère n’est acceptable que s’il est justifié par le poste.` }
+        : { type: "neutral", icone: "i", titre: "Refus proposé sur un critère lié au poste", texte: `L’algorithme veut refuser ce CV à cause de « ${esc(c[C.CRITERE])} », un critère légitime. Un recruteur doit tout de même confirmer avant tout envoi.` };
+
+  const peutDecider = peut("decider");
+  let consigne = "";
+  if (r.refuse && !peutDecider) consigne = `<div class="callout warning"><strong>Votre rôle ne permet pas de décider</strong><p>Le compte ${esc(ROLES[utilisateur.role].label)} ne prend pas de décision sur les candidatures, pour séparer les responsabilités. Connectez-vous avec un compte recruteur ou responsable recrutement pour traiter ce refus.</p></div>`;
+  else if (n === "interdit") consigne = `<div class="callout danger"><strong>Action attendue : annuler le refus</strong><p>Le candidat sera retenu, et la décision enregistrée avec votre nom et la date.</p></div>`;
+  else if (n === "suspect") consigne = `<div class="callout warning"><strong>Action attendue : vérifier le lien avec le poste</strong><p>Annulez le refus, ou validez-le avec un motif qui explique en quoi ce critère est nécessaire pour le poste.</p></div>`;
+  else if (r.refuse) consigne = `<div class="callout info"><strong>Action attendue : confirmer ou annuler</strong><p>Validez le refus et envoyez un motif clair au candidat, ou annulez-le si vous n’êtes pas d’accord avec l’algorithme.</p></div>`;
+
+  const stockage = ctx.enregistre
+    ? `<p class="muted-p">Candidature enregistrée dans Google Sheets. Analyse simulée pour la démonstration : le contenu du fichier n’est pas lu.</p>`
+    : `<div class="callout warning"><strong>Non enregistré dans Google Sheets</strong><p>Make n’a pas répondu : le CV reste visible jusqu’au rechargement de la page, et aucun email ne pourra être envoyé. Vérifiez que le scénario « ajouter-candidature » est actif.</p></div>`;
+
+  const corps = `
+    <div class="cv-verdict ${verdict.type}">
+      <span class="cv-icon" aria-hidden="true">${verdict.icone}</span>
+      <div><strong>${verdict.titre}</strong><p>${verdict.texte}</p></div>
+    </div>
+    <dl class="detail-list">
+      <dt>Candidat</dt><dd>${esc(ctx.nom)} (${esc(c[C.ID])})</dd>
+      <dt>Poste</dt><dd>${esc(ctx.poste)}</dd>
+      <dt>Fichier</dt><dd>${esc(ctx.fichier.name)}</dd>
+      <dt>Score de l’algorithme</dt><dd><span class="cv-score"><i class="${verdict.type}" style="width:${r.score}%"></i></span> ${r.score} / 100</dd>
+    </dl>
+    <h4 class="cv-titre">Vérification des règles de tri</h4>
+    <div class="table-wrap cv-checks"><table>
+      <thead><tr><th>Règle</th><th>Évaluation de la règle</th><th>Résultat pour ce CV</th></tr></thead>
+      <tbody>${lignesRegles.join("") || `<tr><td colspan="3">Aucune règle de tri chargée.</td></tr>`}</tbody>
+    </table></div>
+    ${consigne}
+    ${stockage}`;
+
+  let boutons;
+  if (!r.refuse) {
+    boutons = voitVue("analyse") && utilisateur.role !== "recruteur"
+      ? [{ texte: "Fermer", action: fermerModale }, { texte: "Voir la candidature", classe: "btn-primary", action: () => voirCandidat(c[C.ID], "analyse") }]
+      : [{ texte: "Fermer", classe: "btn-primary", action: fermerModale }];
+  } else if (!peutDecider) {
+    boutons = [{ texte: "Fermer", action: fermerModale }, { texte: "Voir dans la file de revue", classe: "btn-primary", action: () => voirCandidat(c[C.ID], "review") }];
+  } else if (n === "interdit") {
+    boutons = [{ texte: "Plus tard", action: () => voirCandidat(c[C.ID], "review") }, { texte: "Annuler le refus", classe: "btn-primary", action: (b) => decider(c, "annuler", b) }];
+  } else {
+    boutons = [
+      { texte: "Annuler le refus", classe: "btn-outline", action: (b) => decider(c, "annuler", b) },
+      { texte: n === "suspect" ? "Valider avec un motif" : "Valider et envoyer le motif", classe: "btn-primary", action: () => ouvrirDecision(c[C.ID]) },
+    ];
+  }
+  ouvrirModale(r.refuse ? `Analyse de ${ctx.nom} : refus proposé` : `Analyse de ${ctx.nom} : bon profil`, corps, boutons);
+}
 
 // Emmène vers le candidat qui vient d'être importé : la recherche l'isole, puis sa ligne est surlignée
 function voirCandidat(id, vue) {
@@ -1079,6 +1131,36 @@ function voirCandidat(id, vue) {
     if (ligne) ligne.classList.add("row-new");
   }, 200);
 }
+
+// Noms de pages plus clairs, sans modifier index.html
+(() => {
+  const renommer = (vue, texte) => {
+    const lien = document.querySelector(`#nav a[data-view-link="${vue}"]`);
+    if (lien) [...lien.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim()).forEach((n) => { n.textContent = texte; });
+  };
+  const page = (id, titre, intro) => {
+    const s = $(id);
+    if (!s) return;
+    s.dataset.title = titre;
+    const h1 = s.querySelector(".page-head h1"), p = s.querySelector(".page-head p");
+    if (h1) h1.textContent = titre;
+    if (p) p.textContent = intro;
+  };
+  renommer("rgpd", "Données et conservation");
+  renommer("rapports", "Rapports");
+  page("rgpd", "Données et conservation", "Deux vérifications exigées par le RGPD : l’outil de tri ne doit collecter aucune donnée interdite (âge, situation familiale, photo…), et chaque CV doit être supprimé 2 ans après sa réception.");
+  page("rapports", "Rapports", "Trois documents prêts à partager : le rapport AI Act pour les autorités, le bilan d’équité pour la direction et le registre RGPD pour le délégué à la protection des données. Chacun s’ouvre dans un nouvel onglet et se télécharge en PDF.");
+})();
+
+// Lien vers le module statistique « Équité par groupe » (page séparée, données fictives)
+(() => {
+  const rgpd = document.querySelector('#nav a[data-view-link="rgpd"]');
+  if (!rgpd) return;
+  const lien = document.createElement("a");
+  lien.href = "equite-groupes.html";
+  lien.innerHTML = '<svg viewBox="0 0 20 20"><path d="M3 17h14M5 14V9M10 14V5M15 14v-3"/></svg>Équité par groupe';
+  rgpd.before(lien);
+})();
 
 // Modèles de motif : jamais de critère discriminatoire dans le texte envoyé au candidat
 const CONSEILS = {
@@ -1272,9 +1354,9 @@ function lancerPurge() {
 // Rapports d'audit
 // =========================================================
 const RAPPORTS = [
-  { id: "aiact", titre: "Rapport d'audit AI Act", texte: "Pour les autorités de contrôle.", points: ["Score de conformité et contrôles", "Règles de tri et évaluation", "Traçabilité des décisions humaines"] },
-  { id: "equite", titre: "Bilan d'équité", texte: "Pour le comité de direction.", points: ["Taux de refus par poste", "Écarts d'équité et seuil", "Critères de refus dominants"] },
-  { id: "rgpd", titre: "Registre RGPD", texte: "Pour le délégué à la protection des données.", points: ["Données collectées et interdites", "Durée de conservation", "CV purgés et à purger"] },
+  { id: "aiact", titre: "Rapport d'audit AI Act", texte: "Pour les autorités de contrôle : le système respecte-t-il les exigences d'un usage à haut risque ?", points: ["Verdict et classification du système", "Exigences des articles 9 à 14 et contrôles", "Traçabilité et actions recommandées"] },
+  { id: "equite", titre: "Bilan d'équité", texte: "Pour le comité de direction : le tri est-il juste, où sont les écarts, que faut-il corriger ?", points: ["Verdict sur l'écart entre postes et entre femmes et hommes", "Critères qui provoquent les refus et taux d'annulation", "Tests statistiques et actions recommandées"] },
+  { id: "rgpd", titre: "Registre RGPD", texte: "Pour le délégué à la protection des données : le traitement respecte-t-il le RGPD ?", points: ["Fiche du traitement et base légale", "Minimisation et conservation des CV", "Journal des purges et actions recommandées"] },
 ];
 function rendreRapports() {
   $("rapports-grid").innerHTML = RAPPORTS.map((r) => `
@@ -1282,36 +1364,387 @@ function rendreRapports() {
       <span class="report-icon">${ICONES.rapport}</span>
       <div><h2 style="font-size:19px;font-weight:800">${r.titre}</h2><p class="muted-p" style="margin:4px 0 0">${r.texte}</p></div>
       <ul>${r.points.map((p) => `<li>${p}</li>`).join("")}</ul>
-      <button class="btn btn-primary" onclick="genererRapport('${r.id}')"${verrou("rapports")}>Générer le PDF</button>
+      <button class="btn btn-primary" onclick="genererRapport('${r.id}')"${verrou("rapports")}>Ouvrir le rapport</button>
     </article>`).join("");
 }
+
+// =========================================================
+// Statistiques et genre déduit du prénom (rapports, analyse des CV)
+// =========================================================
+function statLnGamma(z) {
+  const g = 7, k = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - statLnGamma(1 - z);
+  z -= 1; let x = k[0];
+  for (let i = 1; i < g + 2; i++) x += k[i] / (z + i);
+  const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+function statGammaQ(a, x) {
+  if (x <= 0) return 1;
+  if (x < a + 1) {
+    let sum = 1 / a, del = sum, ap = a;
+    for (let n = 0; n < 500; n++) { ap += 1; del *= x / ap; sum += del; if (Math.abs(del) < Math.abs(sum) * 1e-14) break; }
+    return 1 - sum * Math.exp(-x + a * Math.log(x) - statLnGamma(a));
+  }
+  let b = x + 1 - a, c = 1e300, d = 1 / b, h = d;
+  for (let i = 1; i < 500; i++) {
+    const an = -i * (i - a); b += 2;
+    d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300;
+    c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300;
+    d = 1 / d; const del = d * c; h *= del;
+    if (Math.abs(del - 1) < 1e-14) break;
+  }
+  return Math.exp(-x + a * Math.log(x) - statLnGamma(a)) * h;
+}
+// Test exact de Fisher bilatéral sur [[a, b], [c, d]]
+function statFisher(a, b, c, d) {
+  const lf = (n) => statLnGamma(n + 1);
+  const r1 = a + b, r2 = c + d, c1 = a + c, n = r1 + r2;
+  const proba = (x) => Math.exp(lf(r1) + lf(r2) + lf(c1) + lf(n - c1) - lf(n) - lf(x) - lf(r1 - x) - lf(c1 - x) - lf(r2 - c1 + x));
+  const pObs = proba(a);
+  let p = 0;
+  for (let x = Math.max(0, c1 - r2); x <= Math.min(r1, c1); x++) { const px = proba(x); if (px <= pObs * (1 + 1e-7)) p += px; }
+  return Math.min(1, p);
+}
+// Khi-deux d'indépendance sur un tableau 2 × 2, avec l'effectif attendu minimal
+function statKhi2(a, b, c, d) {
+  const n = a + b + c + d;
+  const att = [(a + b) * (a + c) / n, (a + b) * (b + d) / n, (c + d) * (a + c) / n, (c + d) * (b + d) / n];
+  const obs = [a, b, c, d];
+  const chi2 = obs.reduce((s, o, i) => s + (att[i] ? (o - att[i]) ** 2 / att[i] : 0), 0);
+  return { chi2, p: statGammaQ(0.5, chi2 / 2), minAttendu: Math.min(...att) };
+}
+function genreDuPrenom(nom) {
+  const prenom = norm(String(nom || "").split(/\s+/)[0]);
+  if (!prenom || EPICENES.has(prenom)) return "Indéterminé";
+  if (FEMMES.has(prenom)) return "Femme";
+  if (HOMMES.has(prenom)) return "Homme";
+  const premier = prenom.split("-")[0];
+  if (FEMMES.has(premier)) return "Femme";
+  if (HOMMES.has(premier)) return "Homme";
+  return "Indéterminé";
+}
+// Comparaison femmes et hommes, sur la décision de l'algorithme ou la décision finale
+function equiteGenre(mode = "algo") {
+  const dec = (s) => mode === "algo"
+    ? (s === "Accepte" ? 1 : String(s).startsWith("Refuse") ? 0 : null)
+    : (s === "Accepte" || s === "Refuse_annule" ? 1 : s === "Refuse_valide" ? 0 : null);
+  const g = { Femme: { n: 0, k: 0 }, Homme: { n: 0, k: 0 } };
+  let indetermines = 0;
+  donnees.candidatures.forEach((c) => {
+    const d = dec(c[C.STATUT]); if (d === null) return;
+    const genre = genreDuPrenom(c[C.NOM]);
+    if (!g[genre]) { indetermines++; return; }
+    g[genre].n++; g[genre].k += d;
+  });
+  const f = g.Femme, h = g.Homme;
+  if (!f.n || !h.n) return null;
+  const tf = f.k / f.n, th = h.k / h.n;
+  const khi = statKhi2(f.k, f.n - f.k, h.k, h.n - h.k);
+  const pF = statFisher(f.k, f.n - f.k, h.k, h.n - h.k);
+  const fisherRetenu = khi.minAttendu < 5;
+  const p = fisherRetenu ? pF : khi.p;
+  const ratio = Math.min(tf, th) / Math.max(tf, th || 1);
+  const defavorise = tf < th ? "Femme" : "Homme";
+  return { f, h, tf, th, ecart: Math.abs(tf - th) * 100, ratio, pF, khi, p, test: fisherRetenu ? "test exact de Fisher" : "khi-deux", indetermines, defavorise,
+    etat: ratio < 0.8 && p < 0.05 ? "bad" : ratio < 0.8 || p < 0.05 ? "warn" : "ok" };
+}
+const fmtP = (p) => (p < 0.001 ? "< 0,001" : p.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
+
+// ---------- Rapports : briques communes ----------
+function prVerdict(type, titre, texte) {
+  return `<div class="pr-verdict ${type}"><strong>${titre}</strong><p>${texte}</p></div>`;
+}
+function prActions(liste) {
+  return `<h2>Actions recommandées</h2><ol class="pr-actions">${liste.map((a) => `<li>${a}</li>`).join("")}</ol>`;
+}
+function prBarre(valeur, max, type = "brand") {
+  const w = max ? Math.round((valeur / max) * 100) : 0;
+  return `<span class="pr-bar"><i class="${type}" style="width:${w}%"></i></span>`;
+}
+
+// ---------- Bilan d'équité : le tri est-il juste, où sont les écarts, que faire ? ----------
+function corpsBilanEquite() {
+  const stats = statsParPoste(donnees.candidatures);
+  const total = stats.reduce((s, x) => s + x.total, 0);
+  const refusTot = stats.reduce((s, x) => s + x.refus, 0);
+  const tauxGlobal = pct(refusTot, total);
+  const plus = stats[0];
+  const moins = stats[stats.length - 1];
+  const ecart = plus && moins ? plus.taux - moins.taux : 0;
+  const limite = moins ? moins.taux + parametres.seuil : 0;
+  const refus = donnees.candidatures.filter(estRefusAlgo);
+  const aRisque = refus.filter((c) => niveau(c[C.CRITERE]) !== "legitime");
+
+  const verdict = !stats.length
+    ? prVerdict("neutral", "Données insuffisantes", "Aucune candidature exploitable pour calculer un bilan.")
+    : ecart > parametres.seuil
+      ? prVerdict("bad", `Alerte : écart de ${ecart} points entre les postes`, `Le poste « ${esc(plus.poste)} » est refusé à ${plus.taux} %, contre ${moins.taux} % pour « ${esc(moins.poste)} ». L’écart dépasse le seuil de ${parametres.seuil} points fixé dans les paramètres d’audit : les règles appliquées aux postes les plus refusés doivent être vérifiées.`)
+      : prVerdict("ok", `Écart maîtrisé : ${ecart} points entre les postes`, `L’écart entre le poste le plus refusé et le moins refusé reste sous le seuil de ${parametres.seuil} points.`);
+
+  const lignesPostes = stats.map((s) => {
+    const diff = s.taux - tauxGlobal;
+    const etat = s.taux > limite ? `<span class="pr-tag bad">Au-dessus du seuil</span>` : `<span class="pr-tag ok">Dans le seuil</span>`;
+    return `<tr><td>${esc(s.poste)}</td><td class="num">${s.total}</td><td>${prBarre(s.taux, 100, s.taux > limite ? "bad" : "brand")} <b>${s.taux} %</b></td><td class="num">${diff > 0 ? "+" : ""}${diff} pts</td><td class="num">${s.biais} sur ${s.refus}</td><td>${etat}</td></tr>`;
+  }).join("");
+
+  // Critères qui provoquent les refus, et ce que les recruteurs en ont fait
+  const parCritere = {};
+  refus.forEach((c) => {
+    const k = c[C.CRITERE];
+    parCritere[k] = parCritere[k] || { critere: k, n: 0, annules: 0, valides: 0 };
+    parCritere[k].n++;
+    if (c[C.STATUT] === "Refuse_annule") parCritere[k].annules++;
+    if (c[C.STATUT] === "Refuse_valide") parCritere[k].valides++;
+  });
+  const criteres = Object.values(parCritere).sort((a, b) => b.n - a.n);
+  const maxN = criteres.length ? criteres[0].n : 0;
+  const etiquette = { interdit: `<span class="pr-tag bad">Interdit</span>`, suspect: `<span class="pr-tag warn">Suspect</span>`, legitime: `<span class="pr-tag ok">Légitime</span>` };
+  const lignesCriteres = criteres.slice(0, 8).map((x) => {
+    const decides = x.annules + x.valides;
+    return `<tr><td>${esc(x.critere)}</td><td>${etiquette[niveau(x.critere)]}</td><td>${prBarre(x.n, maxN, niveau(x.critere) === "interdit" ? "bad" : niveau(x.critere) === "suspect" ? "warn" : "brand")} <b>${x.n}</b></td><td class="num">${pct(x.n, refus.length)} %</td><td class="num">${decides ? `${pct(x.annules, decides)} %` : "-"}</td></tr>`;
+  }).join("");
+
+  const valides = refus.filter((c) => c[C.STATUT] === "Refuse_valide").length;
+  const annules = refus.filter((c) => c[C.STATUT] === "Refuse_annule").length;
+  const attente = refus.filter(aRevoir);
+  const interditsAttente = attente.filter((c) => niveau(c[C.CRITERE]) === "interdit").length;
+
+  const actions = [];
+  donnees.criteres.filter((r) => { const e = evaluerRegle(r); return e.active && e.type === "bad"; })
+    .forEach((r) => actions.push(`Désactiver la règle « ${esc(r["1"])} » : elle repose sur un critère interdit par l’article L1132-1 du Code du travail.`));
+  stats.filter((s) => s.taux > limite).forEach((s) => actions.push(`Auditer les règles appliquées au poste « ${esc(s.poste)} » : ${s.taux} % de refus, soit ${s.taux - moins.taux} points de plus que le poste le moins refusé.`));
+  if (interditsAttente) actions.push(`Traiter en priorité les ${interditsAttente} refus fondés sur un critère interdit encore en attente dans la file de revue.`);
+  criteres.filter((x) => x.annules + x.valides >= 3 && pct(x.annules, x.annules + x.valides) >= 50)
+    .forEach((x) => actions.push(`Revoir le critère « ${esc(x.critere)} » : les recruteurs annulent ${pct(x.annules, x.annules + x.valides)} % des refus qu’il provoque, signe qu’il écarte de bons profils.`));
+  if (!actions.length) actions.push("Aucune action urgente. Refaire ce bilan chaque mois pour suivre l’évolution des écarts.");
+
+  return `${verdict}
+    <div class="pr-kpis">
+      <div><b>${total}</b>candidatures analysées</div>
+      <div><b>${tauxGlobal} %</b>taux de refus moyen</div>
+      <div><b>${ecart} pts</b>écart maximal entre postes (seuil ${parametres.seuil})</div>
+      <div><b>${pct(aRisque.length, refus.length)} %</b>des refus sur un critère interdit ou suspect</div>
+    </div>
+    <h2>Taux de refus par poste</h2>
+    <p class="pr-note">Un poste est au-dessus du seuil quand son taux dépasse celui du poste le moins refusé de plus de ${parametres.seuil} points (limite actuelle : ${limite} %). L’écart à la moyenne compare chaque poste au taux moyen de ${tauxGlobal} %.</p>
+    <table><tr><th>Poste</th><th class="num">Candidatures</th><th>Taux de refus</th><th class="num">Écart à la moyenne</th><th class="num">Refus à risque</th><th>État</th></tr>${lignesPostes}</table>
+    <h2>Critères qui provoquent les refus</h2>
+    <p class="pr-note">Le taux d’annulation indique la part des refus que les recruteurs ont annulés après relecture. Un taux élevé signale un critère qui écarte des candidats à tort.</p>
+    <table><tr><th>Critère</th><th>Niveau</th><th>Refus provoqués</th><th class="num">Part des refus</th><th class="num">Taux d’annulation</th></tr>${lignesCriteres}</table>
+    <h2>Effet du contrôle humain</h2>
+    <table><tr><th>Refus automatiques</th><th class="num">Validés par un humain</th><th class="num">Annulés par un humain</th><th class="num">En attente</th><th class="num">Dont critère interdit</th></tr>
+    <tr><td class="num">${refus.length}</td><td class="num">${valides}</td><td class="num">${annules}</td><td class="num">${attente.length}</td><td class="num">${interditsAttente}</td></tr></table>
+    <p class="pr-note">Sans contrôle humain, les ${annules} refus annulés auraient été envoyés aux candidats.</p>
+    ${prActions(actions)}`;
+}
+
+// ---------- Registre RGPD : fiche de traitement, minimisation, conservation, purges ----------
+function corpsRegistreRGPD() {
+  const registre = donnees.rgpd;
+  const interdites = registre.filter((x) => norm(x["2"]) === "interdit");
+  const expires = cvExpires();
+  const proches = donnees.candidatures.filter((c) => { const j = joursRestants(c); return j !== null && j >= 0 && j <= parametres.alerteJours; });
+  const sixMois = donnees.candidatures.filter((c) => { const j = joursRestants(c); return j !== null && j > parametres.alerteJours && j <= 183; });
+  const sansDate = donnees.candidatures.filter((c) => joursRestants(c) === null);
+  const attente = donnees.candidatures.filter(aRevoir);
+  const purges = journal.filter((e) => e.evenement === "Purge RGPD").slice(0, 10);
+
+  const problemes = [];
+  if (interdites.length) problemes.push(`${interdites.length} donnée${interdites.length > 1 ? "s" : ""} interdite${interdites.length > 1 ? "s" : ""} encore collectée${interdites.length > 1 ? "s" : ""}`);
+  if (expires.length) problemes.push(`${expires.length} CV conservé${expires.length > 1 ? "s" : ""} au-delà de 2 ans`);
+  if (attente.length) problemes.push(`${attente.length} refus automatique${attente.length > 1 ? "s" : ""} sans décision humaine`);
+  const verdict = problemes.length
+    ? prVerdict("bad", "Points de non-conformité à corriger", `${problemes.join(", ")}.`)
+    : prVerdict("ok", "Traitement conforme", "Aucune donnée interdite collectée, aucun CV conservé au-delà de 2 ans, aucun refus sans décision humaine.");
+
+  const fiche = [
+    ["Finalité", "Contrôler le tri automatique des candidatures, valider chaque refus par un humain et informer les candidats du motif."],
+    ["Base légale", "Mesures précontractuelles prises à la demande du candidat (article 6.1.b du RGPD)."],
+    ["Personnes concernées", "Candidats aux offres d’emploi ; recruteurs, pour la traçabilité des décisions."],
+    ["Données traitées", registre.filter((x) => norm(x["2"]) !== "interdit").map((x) => esc(x["0"])).join(", ") || "-"],
+    ["Destinataires", "Équipe RH habilitée, selon les droits de chaque rôle (recruteur, responsable recrutement, directeur RH)."],
+    ["Durée de conservation", "2 ans après la réception du CV, puis suppression (recommandation de la CNIL pour les candidats non retenus)."],
+    ["Décisions automatisées", "Aucun refus n’est communiqué sans décision humaine (article 22). Le candidat reçoit un motif clair."],
+    ["Mesures de sécurité", "Accès par rôle, journal des décisions et de sécurité, purge journalisée, alerte avant suppression."],
+  ].map(([k, v]) => `<tr><th class="pr-th-side">${k}</th><td>${v}</td></tr>`).join("");
+
+  const lignesRegistre = registre.map((x) => {
+    const interdit = norm(x["2"]) === "interdit";
+    return `<tr><td>${esc(x["0"])}</td><td>${esc(x["1"])}</td><td>${interdit ? `<span class="pr-tag bad">Interdite</span>` : `<span class="pr-tag ok">Autorisée</span>`}</td><td>${esc(x["3"])}</td><td>${interdit ? "Cesser la collecte et effacer les valeurs existantes" : "Conserver"}</td></tr>`;
+  }).join("");
+
+  const lignesPurge = expires.slice(0, 15).map((c) => `<tr><td>${esc(c[C.ID])}</td><td>${esc(c[C.POSTE])}</td><td>${fDate(c[C.SUPPR])}</td><td class="num">${-joursRestants(c)} jours</td></tr>`).join("");
+  const lignesJournal = purges.length
+    ? purges.map((e) => `<tr><td>${new Date(e.date).toLocaleString("fr-FR")}</td><td>${esc(e.qui)}</td><td>${esc(e.detail)}</td></tr>`).join("")
+    : `<tr><td colspan="3">Aucune purge enregistrée dans le journal de cette session.</td></tr>`;
+
+  const actions = [];
+  interdites.forEach((x) => actions.push(`Arrêter la collecte de « ${esc(x["0"])} » dans l’outil de tri et effacer les valeurs déjà enregistrées.`));
+  if (expires.length) actions.push(`Lancer la purge des ${expires.length} CV expirés depuis la page Données et conservation.`);
+  if (proches.length) actions.push(`Prévoir la suppression de ${proches.length} CV qui atteignent 2 ans dans les ${parametres.alerteJours} prochains jours.`);
+  if (sansDate.length) actions.push(`Renseigner la date de suppression de ${sansDate.length} candidature${sansDate.length > 1 ? "s" : ""} qui n’en ont pas.`);
+  if (attente.length) actions.push(`Faire relire par un recruteur les ${attente.length} refus en attente avant tout envoi au candidat.`);
+  if (!actions.length) actions.push("Aucune action urgente. Vérifier ce registre à chaque modification de l’outil de tri.");
+
+  return `${verdict}
+    <div class="pr-kpis">
+      <div><b>${registre.length}</b>données recensées</div>
+      <div><b>${interdites.length}</b>données interdites collectées</div>
+      <div><b>${expires.length}</b>CV à purger</div>
+      <div><b>${proches.length}</b>suppressions dans ${parametres.alerteJours} jours</div>
+    </div>
+    <h2>Fiche du traitement</h2>
+    <table class="pr-fiche">${fiche}</table>
+    <h2>Minimisation : registre des données extraites des CV</h2>
+    <table><tr><th>Donnée</th><th>Catégorie</th><th>Statut</th><th>Justification</th><th>Action</th></tr>${lignesRegistre}</table>
+    <h2>Conservation des CV</h2>
+    <table><tr><th>Expirés (à purger)</th><th>Suppression dans ${parametres.alerteJours} jours</th><th>Suppression dans 6 mois</th><th>Sans date de suppression</th></tr>
+    <tr><td class="num">${expires.length}</td><td class="num">${proches.length}</td><td class="num">${sixMois.length}</td><td class="num">${sansDate.length}</td></tr></table>
+    ${expires.length ? `<p class="pr-note">CV à purger, identifiés par leur seul numéro : le nom des candidats n’est pas repris dans ce registre, par minimisation.${expires.length > 15 ? ` Les 15 premiers sur ${expires.length}.` : ""}</p>
+    <table><tr><th>Identifiant</th><th>Poste</th><th>Date de suppression prévue</th><th class="num">Retard</th></tr>${lignesPurge}</table>` : ""}
+    <h2>Journal des purges</h2>
+    <table><tr><th>Date</th><th>Par</th><th>Détail</th></tr>${lignesJournal}</table>
+    ${prActions(actions)}`;
+}
+
+// ---------- Rapport AI Act : le système respecte-t-il les exigences d'un usage à haut risque ? ----------
+function corpsRapportAIAct() {
+  const ctrl = controles();
+  const refus = donnees.candidatures.filter(estRefusAlgo);
+  const revus = refus.filter(traiteHumain);
+  const attente = donnees.candidatures.filter(aRevoir);
+  const interditsAttente = attente.filter((c) => niveau(c[C.CRITERE]) === "interdit").length;
+  const regles = donnees.criteres.map((r) => ({ r, ev: evaluerRegle(r) }));
+  const actives = regles.filter((x) => x.ev.active);
+  const interdites = actives.filter((x) => x.ev.type === "bad");
+  const risque = actives.filter((x) => x.ev.type === "warn");
+  const decisions = donnees.candidatures.filter(traiteHumain);
+  const genre = equiteGenre("algo");
+
+  const verdict = ctrl.score >= 80
+    ? prVerdict("ok", `Conformité satisfaisante : score de ${ctrl.score} %`, "Les principales exigences d’un système à haut risque sont couvertes. Les points restants figurent dans les actions recommandées.")
+    : ctrl.score >= 50
+      ? prVerdict("warn", `Conformité partielle : score de ${ctrl.score} %`, `${ctrl.liste.filter((x) => !x.ok).length} contrôles sur ${ctrl.liste.length} ne sont pas entièrement réussis. Le système peut être utilisé sous supervision, mais les corrections doivent être planifiées.`)
+      : prVerdict("bad", `Conformité insuffisante : score de ${ctrl.score} %`, "Plusieurs exigences essentielles ne sont pas respectées. Les refus automatiques ne devraient pas être communiqués avant correction.");
+
+  const exigences = [
+    ["Gestion des risques (article 9)", interdites.length ? `<span class="pr-tag bad">${interdites.length} règle${interdites.length > 1 ? "s" : ""} interdite${interdites.length > 1 ? "s" : ""} active${interdites.length > 1 ? "s" : ""}</span>` : `<span class="pr-tag ok">Aucune règle interdite active</span>`, `${actives.length} règles actives, dont ${risque.length} à risque à justifier.`],
+    ["Données et biais (article 10)", genre ? `<span class="pr-tag ${genre.etat}">Ratio femmes-hommes ${fmtNombre(genre.ratio, 2)}</span>` : `<span class="pr-tag warn">Non mesuré</span>`, genre ? `Écart de ${fmtNombre(genre.ecart, 1)} points entre femmes et hommes, ${genre.test}, p-valeur ${fmtP(genre.p)}. Écart maximal entre postes : ${Math.round(ctrl.ecart)} points.` : "Pas assez de prénoms reconnus pour mesurer l’écart femmes-hommes."],
+    ["Journalisation (article 12)", `<span class="pr-tag ok">${decisions.length} décisions tracées</span>`, "Chaque décision humaine est enregistrée avec son auteur et sa date ; le journal de sécurité trace les connexions, imports et purges."],
+    ["Transparence (article 13)", `<span class="pr-tag ok">${regles.length} règles documentées</span>`, "Les règles de tri, leur poids et leur évaluation sont consultables ; chaque candidat refusé reçoit un motif clair."],
+    ["Contrôle humain (article 14)", attente.length ? `<span class="pr-tag ${interditsAttente ? "bad" : "warn"}">${attente.length} refus en attente</span>` : `<span class="pr-tag ok">Tous les refus revus</span>`, `${pct(revus.length, refus.length)} % des ${refus.length} refus automatiques ont été revus par une personne${interditsAttente ? `, mais ${interditsAttente} refus sur critère interdit attendent encore une décision` : ""}.`],
+  ].map(([e, etat, detail]) => `<tr><td><strong>${e}</strong></td><td>${etat}</td><td>${detail}</td></tr>`).join("");
+
+  const lignesControles = ctrl.liste.map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${x.score} %</td><td>${x.ok ? `<span class="pr-tag ok">Réussi</span>` : `<span class="pr-tag ${x.type === "bad" ? "bad" : "warn"}">À corriger</span>`}</td><td>${x.ok ? "-" : esc(x.detail)}</td></tr>`).join("");
+  const lignesRegles = regles.map(({ r, ev }) => `<tr><td>${esc(r["1"])}</td><td class="num">${esc(r["3"])}</td><td><span class="pr-tag ${ev.type === "neutral" ? "ok" : ev.type}">${ev.label}</span></td><td>${!ev.active ? "Aucune, règle désactivée" : ev.type === "bad" ? "Désactiver immédiatement" : ev.type === "warn" ? "Justifier le lien avec le poste ou désactiver" : "Conserver"}</td></tr>`).join("");
+  const lignesDecisions = decisions.slice(-15).reverse().map((c) => `<tr><td>${esc(c[C.ID])}</td><td>${esc(c[C.CRITERE])}</td><td>${STATUTS[c[C.STATUT]] ? STATUTS[c[C.STATUT]].label : esc(c[C.STATUT])}</td><td>${esc(c[C.DECIDEUR])}</td><td>${fDate(c[C.DATE_DEC])}</td></tr>`).join("") || `<tr><td colspan="5">Aucune décision humaine enregistrée.</td></tr>`;
+
+  const actions = ctrl.liste.filter((x) => !x.ok).map((x) => `${esc(x.titre)} : ${esc(x.detail)}`);
+  interdites.forEach((x) => actions.push(`Désactiver la règle « ${esc(x.r["1"])} », fondée sur un critère interdit.`));
+  if (genre && genre.etat !== "ok") actions.push(`Analyser l’écart entre femmes et hommes (ratio ${fmtNombre(genre.ratio, 2)}) dans la page Équité par groupe.`);
+  if (!actions.length) actions.push("Aucune action urgente. Refaire cet audit à chaque modification des règles de tri.");
+
+  return `${verdict}
+    <div class="pr-kpis">
+      <div><b>${ctrl.score} %</b>score de conformité (moyenne de ${ctrl.liste.length} contrôles)</div>
+      <div><b>${refus.length}</b>refus proposés par l’algorithme</div>
+      <div><b>${pct(revus.length, refus.length)} %</b>des refus revus par un humain</div>
+      <div><b>${attente.length}</b>refus en attente, dont ${interditsAttente} sur critère interdit</div>
+    </div>
+    <h2>Classification du système</h2>
+    <table class="pr-fiche">
+      <tr><th class="pr-th-side">Système contrôlé</th><td>Outil de tri automatique de CV, qui propose d’accepter ou de refuser chaque candidature.</td></tr>
+      <tr><th class="pr-th-side">Catégorie AI Act</th><td>Système à haut risque : l’annexe III vise les systèmes destinés au recrutement, notamment pour analyser et filtrer les candidatures.</td></tr>
+      <tr><th class="pr-th-side">Calendrier</th><td>Obligations des systèmes à haut risque applicables au 2 décembre 2027, après le report approuvé par le Parlement européen le 16 juin 2026.</td></tr>
+      <tr><th class="pr-th-side">Rôle d’Equitera</th><td>Supervision humaine, traçabilité et surveillance des biais du système contrôlé.</td></tr>
+    </table>
+    <h2>Exigences et état actuel</h2>
+    <table><tr><th>Exigence</th><th>État</th><th>Constat</th></tr>${exigences}</table>
+    <h2>Contrôles de conformité</h2>
+    <p class="pr-note">Le score de conformité est la moyenne de ces contrôles. C’est un indicateur interne de pilotage, pas une certification.</p>
+    <table><tr><th>Contrôle</th><th class="num">Score</th><th>Résultat</th><th>Action</th></tr>${lignesControles}</table>
+    <h2>Règles de tri appliquées par l’algorithme</h2>
+    <table><tr><th>Règle</th><th class="num">Poids</th><th>Évaluation</th><th>Action</th></tr>${lignesRegles}</table>
+    <h2>Traçabilité : dernières décisions humaines</h2>
+    <p class="pr-note">Les candidats sont identifiés par leur seul numéro, par minimisation des données.</p>
+    <table><tr><th>Candidature</th><th>Critère</th><th>Décision</th><th>Par</th><th>Date</th></tr>${lignesDecisions}</table>
+    ${prActions(actions)}`;
+}
+
+// Bloc femmes-hommes ajouté au bilan d'équité
+function blocEquiteGenre() {
+  const a = equiteGenre("algo"), f = equiteGenre("finale");
+  if (!a) return `<h2>Écart entre femmes et hommes</h2><p class="pr-note">Pas assez de prénoms reconnus pour comparer femmes et hommes.</p>`;
+  const ligne = (x, lib) => x ? `<tr><td><strong>${lib}</strong></td><td class="num">${fmtNombre(x.tf * 100, 1)} % (n = ${x.f.n})</td><td class="num">${fmtNombre(x.th * 100, 1)} % (n = ${x.h.n})</td><td class="num">${fmtNombre(x.ecart, 1)} pts</td><td class="num">${fmtNombre(x.ratio, 2)}</td><td>${x.test}</td><td class="num">${fmtP(x.p)}</td><td><span class="pr-tag ${x.etat}">${x.etat === "bad" ? "Alerte" : x.etat === "warn" ? "À surveiller" : "Pas d’écart"}</span></td></tr>` : "";
+  return `<h2>Écart entre femmes et hommes</h2>
+    <p class="pr-note">Le genre n’est pas collecté : il est déduit du prénom, et ${a.indetermines} candidature${a.indetermines > 1 ? "s" : ""} au prénom épicène ou inconnu ${a.indetermines > 1 ? "sont exclues" : "est exclue"}. Alerte si le ratio d’impact est sous 0,8 (règle des quatre cinquièmes) et que l’écart est significatif au seuil de 5 %. Une alerte n’est pas une preuve de discrimination.</p>
+    <table><tr><th>Décision</th><th class="num">Femmes retenues</th><th class="num">Hommes retenus</th><th class="num">Écart</th><th class="num">Ratio</th><th>Test</th><th class="num">p-valeur</th><th>État</th></tr>${ligne(a, "Algorithme seul")}${ligne(f, "Après revue humaine")}</table>
+    <p class="pr-note">Analyse détaillée (intervalles de confiance, graphiques, comparaison par poste) : page Équité par groupe.</p>`;
+}
+const fmtNombre = (x, d) => x.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+// ---------- Ouverture des rapports dans un nouvel onglet ----------
+const LOGO_RAPPORT = `<svg width="190" height="52" viewBox="0 0 360 96" aria-label="Equitera"><defs><linearGradient id="rg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#5B4CF0"/><stop offset="1" stop-color="#9B8CFF"/></linearGradient></defs><g transform="translate(48 48)"><circle r="36" fill="none" stroke="url(#rg)" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="56 44" transform="rotate(-10)"/><circle r="36" fill="none" stroke="#101A3F" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="24 76" transform="rotate(-170)"/><circle r="18" fill="none" stroke="#101A3F" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="74 26" transform="rotate(35)"/><circle r="7.5" fill="#FF7A59"/></g><text x="104" y="54" font-family="Plus Jakarta Sans, sans-serif" font-size="46" font-weight="800" fill="#101A3F">equitera</text><text x="106" y="80" font-family="Plus Jakarta Sans, sans-serif" font-size="14.5" font-weight="700" fill="#5B4CF0" letter-spacing="3.2">HUMAN ETHICS AI</text></svg>`;
+const CSS_RAPPORT = `
+*{box-sizing:border-box}body{margin:0;background:#eef1fa;font-family:"Plus Jakarta Sans",system-ui,sans-serif;color:#101a3f;-webkit-font-smoothing:antialiased}
+.barre{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 24px;background:#101a3f;color:#fff;font-weight:700}
+.barre button{padding:10px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,#5b4cf0,#8b7cf8);color:#fff;font:inherit;font-weight:800;cursor:pointer}
+.barre small{color:#aab1d6;font-weight:600}
+.page{max-width:860px;margin:28px auto 60px;padding:40px 46px;background:#fff;border-radius:18px;box-shadow:0 10px 30px rgba(16,26,63,.08);font-size:14px;line-height:1.55}
+.pr-head{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:12px;border-bottom:3px solid #5b4cf0}
+.pr-meta{text-align:right;font-size:12px;color:#5d6685}
+h1{margin:20px 0 4px;font-size:28px;font-weight:800;letter-spacing:-.02em}
+.pr-intro{margin:0;color:#5d6685}
+h2{margin:26px 0 8px;font-size:17px;font-weight:800;break-after:avoid}
+table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px}
+th{padding:8px 10px;text-align:left;font-size:12px;font-weight:800;color:#5d6685;background:#f3f2ff;border-bottom:1px solid #d9dcf0}
+td{padding:8px 10px;border-bottom:1px solid #e1e5f2;vertical-align:middle}
+tr{break-inside:avoid}.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.pr-kpis div{padding:12px;border-radius:12px;background:#f6f7fd;border:1px solid #e1e5f2;font-size:12px;color:#5d6685;line-height:1.35}
+.pr-kpis b{display:block;margin-bottom:4px;font-size:22px;font-weight:800;color:#101a3f;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pr-verdict{margin-top:18px;padding:14px 16px;border-radius:0 12px 12px 0;border-left:5px solid;break-inside:avoid}
+.pr-verdict strong{display:block;font-size:16px}.pr-verdict p{margin:4px 0 0}
+.pr-verdict.ok{border-color:#12a150;background:#e6f7ee}.pr-verdict.bad{border-color:#d92d48;background:#fdebee}
+.pr-verdict.warn{border-color:#f79009;background:#fef3e2}.pr-verdict.neutral{border-color:#8c93ad;background:#f6f7fd}
+.pr-tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:800;white-space:nowrap}
+.pr-tag.ok{color:#12a150;background:#e6f7ee}.pr-tag.warn{color:#c26a00;background:#fef3e2}.pr-tag.bad{color:#d92d48;background:#fdebee}
+.pr-bar{display:inline-block;width:64px;height:7px;margin-right:6px;border-radius:999px;background:#eef1fa;vertical-align:middle;overflow:hidden}
+td:has(.pr-bar){white-space:nowrap}
+.pr-bar i{display:block;height:100%;border-radius:999px;background:#5b4cf0}.pr-bar i.bad{background:#d92d48}.pr-bar i.warn{background:#f79009}
+.pr-note{margin:6px 0 0;font-size:12px;color:#5d6685}
+.pr-actions{margin:6px 0 0;padding-left:18px}.pr-actions li{margin-top:5px}
+.pr-fiche .pr-th-side{width:28%;vertical-align:top}
+.pr-sign{display:flex;justify-content:space-between;gap:20px;margin-top:30px;padding-top:12px;border-top:1px solid #e1e5f2;font-size:12px;color:#5d6685}
+@media print{@page{size:A4;margin:14mm 12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#fff}.barre{display:none}.page{margin:0;padding:0;max-width:none;box-shadow:none;border-radius:0;font-size:10.5pt}}
+`;
 
 function genererRapport(id) {
   if (!peut("rapports")) return;
   const r = RAPPORTS.find((x) => x.id === id);
-  const ctrl = controles();
-  const score = ctrl.score;
-  const stats = statsParPoste(donnees.candidatures);
-  const refus = donnees.candidatures.filter(estRefusAlgo);
-  const logo = `<svg width="200" height="54" viewBox="0 0 360 96"><use href="#eq-mark" x="0" y="0" width="96" height="96"/><text x="104" y="54" font-size="46" font-weight="800" fill="#101A3F">equitera</text><text x="106" y="80" font-size="14.5" font-weight="700" fill="#5B4CF0" letter-spacing="3.2">HUMAN ETHICS AI</text></svg>`;
-  let corps = "";
-  if (id === "aiact") {
-    corps = `<div class="pr-kpis"><div><b>${score} %</b>Score de conformité</div><div><b>${refus.length}</b>Refus automatiques</div><div><b>${pct(refus.filter(traiteHumain).length, refus.length)} %</b>Revus par un humain</div><div><b>${donnees.candidatures.filter(aRevoir).length}</b>En attente</div></div>
-      <h2>Contrôles</h2><table><tr><th>Contrôle</th><th>Score</th><th>Résultat</th></tr>${ctrl.liste.map((x) => `<tr><td>${x.label}</td><td>${x.score} %</td><td>${x.ok ? "Réussi" : "À corriger"}</td></tr>`).join("")}</table>
-      <h2>Règles de tri</h2><table><tr><th>Règle</th><th>Poids</th><th>Évaluation</th></tr>${donnees.criteres.map((c) => `<tr><td>${esc(c["1"])}</td><td>${esc(c["3"])}</td><td>${evaluerRegle(c).label}</td></tr>`).join("")}</table>
-      <h2>Dernières décisions humaines</h2><table><tr><th>Candidat</th><th>Décision</th><th>Par</th><th>Date</th></tr>${donnees.candidatures.filter(traiteHumain).slice(-15).map((c) => `<tr><td>${esc(c[C.ID])}</td><td>${STATUTS[c[C.STATUT]].label}</td><td>${esc(c[C.DECIDEUR])}</td><td>${fDate(c[C.DATE_DEC])}</td></tr>`).join("")}</table>`;
-  } else if (id === "equite") {
-    corps = `<div class="pr-kpis"><div><b>${ctrl.ecart} pts</b>Écart maximal</div><div><b>${parametres.seuil} pts</b>Seuil d'alerte</div><div><b>${stats.length}</b>Postes</div><div><b>${refus.filter((c) => niveau(c[C.CRITERE]) !== "legitime").length}</b>Refus sur critère à risque</div></div>
-      <h2>Taux de refus par poste</h2><table><tr><th>Poste</th><th>Candidatures</th><th>Refus</th><th>Taux</th><th>Refus sur critère à risque</th></tr>${stats.map((s) => `<tr><td>${esc(s.poste)}</td><td>${s.total}</td><td>${s.refus}</td><td>${s.taux} %</td><td>${s.biais}</td></tr>`).join("")}</table>`;
-  } else {
-    corps = `<div class="pr-kpis"><div><b>${donnees.rgpd.length}</b>Données collectées</div><div><b>${donnees.rgpd.filter((x) => norm(x["2"]) === "interdit").length}</b>Données interdites</div><div><b>24 mois</b>Conservation</div><div><b>${cvExpires().length}</b>CV à purger</div></div>
-      <h2>Registre des données</h2><table><tr><th>Donnée</th><th>Catégorie</th><th>Statut</th><th>Justification</th></tr>${donnees.rgpd.map((x) => `<tr><td>${esc(x["0"])}</td><td>${esc(x["1"])}</td><td>${esc(x["2"])}</td><td>${esc(x["3"])}</td></tr>`).join("")}</table>`;
-  }
-  const el = $("print-report");
-  el.innerHTML = `<div class="pr-head">${logo}<div class="pr-meta">Généré le ${new Date().toLocaleString("fr-FR")}<br>par ${esc(utilisateur.nom)}, ${ROLES[utilisateur.role].label}</div></div>
-    <h1>${r.titre}</h1><p style="color:#5d6685">${r.texte} Données : ${mode === "live" ? "Google Sheets (temps réel)" : "jeu de démonstration"}.</p>${corps}
-    <div class="pr-sign"><span>Document généré par Equitera, contrôle humain du recrutement automatisé.</span><span>Signature : ____________________</span></div>`;
+  const corps = id === "aiact" ? corpsRapportAIAct() : id === "equite" ? corpsBilanEquite() + blocEquiteGenre() : corpsRegistreRGPD();
+  const source = mode === "live" ? "Google Sheets, en temps réel" : "jeu de démonstration";
+  const contenu = `<div class="pr-head">${LOGO_RAPPORT}<div class="pr-meta">Généré le ${new Date().toLocaleString("fr-FR")}<br>par ${esc(utilisateur.nom)}, ${ROLES[utilisateur.role].label}<br>Données : ${source}</div></div>
+    <h1>${r.titre}</h1><p class="pr-intro">${r.texte}</p>${corps}
+    <div class="pr-sign"><span>Document généré par Equitera, prototype universitaire de contrôle humain du recrutement automatisé. Données de démonstration.</span><span>Signature : ____________________</span></div>`;
   tracer("Rapport généré", r.titre, "info");
+  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${r.titre} - Equitera</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>${CSS_RAPPORT}</style></head><body>
+    <div class="barre"><span>${r.titre} <small>· choisissez « Enregistrer au format PDF » dans la fenêtre d’impression</small></span><button type="button" onclick="window.print()">Télécharger en PDF</button></div>
+    <main class="page">${contenu}</main></body></html>`;
+  const onglet = window.open("", "_blank");
+  if (onglet) {
+    onglet.document.open();
+    onglet.document.write(page);
+    onglet.document.close();
+    return;
+  }
+  // Fenêtres bloquées par le navigateur : impression directe du rapport depuis la page
+  const el = $("print-report");
+  el.innerHTML = contenu;
   document.body.classList.add("print-report-mode");
   window.print();
 }
@@ -1347,7 +1780,7 @@ function rendreUtilisateurs() {
     </tr>`;
   }).join("");
   $("matrix-head").innerHTML = `<tr><th>Action</th>${Object.values(ROLES).map((r) => `<th>${r.label.split(" ")[0]}</th>`).join("")}</tr>`;
-  const vuesLabel = [["Vue d'ensemble", "dashboard"], ["Analyse des refus", "analyse"], ["Règles de tri", "regles"], ["File de revue", "review"], ["Charge des recruteurs", "equipe"], ["RGPD et rétention", "rgpd"], ["Rapports d'audit", "rapports"]];
+  const vuesLabel = [["Vue d'ensemble", "dashboard"], ["Analyse des refus", "analyse"], ["Règles de tri", "regles"], ["File de revue", "review"], ["Charge des recruteurs", "equipe"], ["Données et conservation", "rgpd"], ["Rapports", "rapports"]];
   $("matrix-body").innerHTML =
     vuesLabel.map(([l, v]) => `<tr><td>Voir : ${l}</td>${Object.values(ROLES).map((r) => `<td>${r.vues.includes(v) ? '<span class="yes-txt">Oui</span>' : '<span class="no-txt">Non</span>'}</td>`).join("")}</tr>`).join("") +
     DROITS.map((d) => `<tr><td>${d.label}</td>${Object.keys(ROLES).map((k) => `<td>${d.roles.includes(k) ? '<span class="yes-txt">Oui</span>' : '<span class="no-txt">Non</span>'}</td>`).join("")}</tr>`).join("");
